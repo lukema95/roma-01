@@ -1,0 +1,49 @@
+# Grok 4 Configuration
+
+agent:
+  id: "grok-4"
+  name: "GROK 4"
+  description: "Grok 4 trading agent"
+
+llm:
+  provider: "xai"
+  api_key: "${XAI_API_KEY}"
+  model: "grok-4"
+  temperature: 0.15
+  max_tokens: 4000
+
+exchange:
+  type: "aster"
+  # Each model uses its own account credentials
+  user: "${ASTER_USER_GROK}"
+  signer: "${ASTER_SIGNER_GROK}"
+  private_key: "${ASTER_PRIVATE_KEY_GROK}"
+  testnet: false
+
+strategy:
+  initial_balance: 10000.0
+  scan_interval_minutes: 3
+  
+  max_account_usage_pct: 100
+  
+  default_coins:
+    - "BTCUSDT"
+    - "ETHUSDT"
+    - "SOLUSDT"
+    - "BNBUSDT"
+    - "DOGEUSDT"
+    - "XRPUSDT"
+  
+  risk_management:
+    max_positions: 3
+    max_leverage: 10
+    max_position_size_pct: 30
+    max_total_position_pct: 80
+    max_single_trade_pct: 45
+    max_single_trade_with_positions_pct: 30
+    max_daily_loss_pct: 15
+    stop_loss_pct: 3
+    take_profit_pct: 10
+  
+  trading_style: "aggressive"
+

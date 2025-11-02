@@ -1,0 +1,216 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* default to dark theme */
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --header-h: 40px;
+  --ticker-h: 28px;
+  
+  /* Theme-aware colors */
+  --chart-logo-bg: rgba(255, 255, 255, 0.9);
+  --chart-logo-ring: rgba(255, 255, 255, 0.28);
+  --logo-chip-bg: rgba(255, 255, 255, 0.06);
+  --logo-chip-ring: rgba(255, 255, 255, 0.15);
+  
+  /* Model brand colors */
+  --brand-deepseek: #4d6bfe;
+  --brand-qwen: #8b5cf6;
+  --brand-claude: #ff6b35;
+  --brand-gpt: #10a37f;
+  
+  /* Skeleton background */
+  --skeleton-bg: rgba(255, 255, 255, 0.1);
+  --watermark-color: rgba(255, 255, 255, 0.06);
+  
+  /* Chart/UI themed variables (dark defaults) */
+  --panel-bg: #0a0a0a;
+  --panel-border: rgba(255, 255, 255, 0.1);
+  --muted-text: #a1a1aa;
+  --axis-tick: #a1a1aa;
+  --grid-stroke: rgba(255, 255, 255, 0.08);
+  --ref-line: #a1a1aa;
+  --chip-border: rgba(255, 255, 255, 0.15);
+  --btn-active-bg: rgba(255, 255, 255, 0.1);
+  --btn-active-fg: #e4e4e7;
+  --btn-inactive-fg: #d4d4d8;
+  --btn-hover-bg: rgba(255, 255, 255, 0.05);
+  --tooltip-bg: #09090b;
+  --tooltip-border: rgba(255, 255, 255, 0.1);
+  --tooltip-fg: #e4e4e7;
+  --brand-accent: #c084fc;
+  --header-bg: rgba(0, 0, 0, 0.7);
+  --header-border: rgba(255, 255, 255, 0.1);
+}
+
+/* Light theme overrides */
+:root[data-theme="light"] {
+  --background: #ffffff;
+  --foreground: #171717;
+  --chart-logo-bg: rgba(0, 0, 0, 0.75);
+  --chart-logo-ring: rgba(0, 0, 0, 0.25);
+  --logo-chip-bg: rgba(0, 0, 0, 0.06);
+  --logo-chip-ring: rgba(0, 0, 0, 0.15);
+  --skeleton-bg: rgba(0, 0, 0, 0.1);
+  --watermark-color: rgba(0, 0, 0, 0.06);
+  
+  --panel-bg: #ffffff;
+  --panel-border: rgba(0, 0, 0, 0.1);
+  --muted-text: #52525b;
+  --axis-tick: #52525b;
+  --grid-stroke: rgba(0, 0, 0, 0.08);
+  --ref-line: #9ca3af;
+  --chip-border: rgba(0, 0, 0, 0.15);
+  --btn-active-bg: rgba(0, 0, 0, 0.1);
+  --btn-active-fg: #18181b;
+  --btn-inactive-fg: #52525b;
+  --btn-hover-bg: rgba(0, 0, 0, 0.05);
+  --tooltip-bg: #ffffff;
+  --tooltip-border: rgba(0, 0, 0, 0.12);
+  --tooltip-fg: #18181b;
+  --line-too-light-fallback: #4b5563;
+  --table-row-alt: rgba(0, 0, 0, 0.05);
+  --link-hover: #000000;
+  --brand-accent: #7c3aed;
+  --header-bg: rgba(255, 255, 255, 0.7);
+  --header-border: rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="dark"] {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --line-too-dark-fallback: #d4d4d8;
+  --table-row-alt: rgba(255, 255, 255, 0.05);
+  --link-hover: #ffffff;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'IBM Plex Mono', monospace;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+html, body {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Tabular numbers for data-heavy UI */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
+/* Terminal-like monospace typography */
+.terminal-text {
+  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Terminal vibe background subtle scanlines (dark theme only) */
+.terminal-scan {
+  background: none;
+}
+
+:root[data-theme="dark"] .terminal-scan {
+  background: 
+    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+    linear-gradient(90deg, rgba(255, 0, 0, 0.04), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.04));
+  background-size: 100% 2px, 3px 100%;
+}
+
+/* Reusable logo chip styles */
+.logo-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--logo-chip-bg);
+  border: 1px solid var(--logo-chip-ring);
+  border-radius: 6px;
+}
+
+.logo-chip-sm {
+  width: 16px;
+  height: 16px;
+}
+
+.logo-chip-md {
+  width: 20px;
+  height: 20px;
+}
+
+/* Generic chip buttons */
+.chip-btn {
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.chip-btn:hover {
+  background: var(--btn-hover-bg);
+}
+
+/* Chart series hover optimization */
+.recharts-surface g.series {
+  opacity: 1;
+  transition: opacity 200ms ease;
+}
+
+.chart-container:has(g.series:hover) g.series:not(:hover) {
+  opacity: 0.25;
+}
+
+/* Remove tap highlight */
+.no-tap-highlight {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.recharts-wrapper, .recharts-wrapper * {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Skeleton background */
+.skeleton-bg {
+  background: var(--skeleton-bg);
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+

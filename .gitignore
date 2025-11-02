@@ -1,0 +1,103 @@
+# AI-01 .gitignore
+
+# ============================================
+# Python
+# ============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# ============================================
+# Environment Variables & Secrets
+# ============================================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.p12
+
+# ============================================
+# Logs & Databases
+# ============================================
+logs/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# ============================================
+# Node.js / Frontend
+# ============================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+package-lock.json
+
+# Next.js
+.next/
+out/
+.vercel
+.turbo
+
+# ============================================
+# IDE & Editors
+# ============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ============================================
+# Testing
+# ============================================
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.tox/
+.hypothesis/
+
+# ============================================
+# OS Files
+# ============================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ============================================
+# Docker
+# ============================================
+*.dockerignore
+docker-compose.override.yml
+
+# ============================================
+# Temporary Files
+# ============================================
+*.tmp
+*.temp
+*.bak
+*.swp
+*~.nib
+

@@ -1,0 +1,52 @@
+# DeepSeek Chat V3.1 Configuration
+
+agent:
+  id: "deepseek-chat-v3.1"
+  name: "DEEPSEEK CHAT V3.1"
+  description: "DeepSeek V3.1 trading agent"
+
+llm:
+  provider: "deepseek"
+  api_key: "${DEEPSEEK_API_KEY}"
+  model: "deepseek-chat"
+  temperature: 0.15
+  max_tokens: 4000
+
+exchange:
+  type: "aster"
+  # Each model uses its own account credentials
+  user: "${ASTER_USER_DEEPSEEK}"
+  signer: "${ASTER_SIGNER_DEEPSEEK}"
+  private_key: "${ASTER_PRIVATE_KEY_DEEPSEEK}"
+  testnet: false
+
+strategy:
+  initial_balance: 10000.0
+  scan_interval_minutes: 3
+  
+  # Account usage limit
+  max_account_usage_pct: 100
+  
+  # Coins to trade
+  default_coins:
+    - "BTCUSDT"
+    - "ETHUSDT"
+    - "SOLUSDT"
+    - "BNBUSDT"
+    - "DOGEUSDT"
+    - "XRPUSDT"
+  
+  # Risk management
+  risk_management:
+    max_positions: 3
+    max_leverage: 10
+    max_position_size_pct: 30
+    max_total_position_pct: 80
+    max_single_trade_pct: 50
+    max_single_trade_with_positions_pct: 30
+    max_daily_loss_pct: 15
+    stop_loss_pct: 3
+    take_profit_pct: 10
+  
+  trading_style: "balanced"
+

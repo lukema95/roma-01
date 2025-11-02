@@ -1,0 +1,630 @@
+"use client";
+
+import { useState } from "react";
+import useSWR from "swr";
+import { api } from "@/lib/api";
+import type { Agent, Position } from "@/types";
+import { fmtUSD, fmtPercent } from "@/lib/utils/formatters";
+import { getModelColor, getModelName } from "@/lib/model/meta";
+import { getCoinIcon } from "@/lib/utils/coinIcons";
+
+interface RightSideTabsProps {
+  agents: Agent[];
+}
+
+type TabType = "positions" | "trades" | "decisions";
+
+export function RightSideTabs({ agents }: RightSideTabsProps) {
+  const [activeTab, setActiveTab] = useState<TabType>("positions");
+  const [filterAgent, setFilterAgent] = useState<string>("all");
+
+  return (
+    <div
+      className="flex h-full flex-col rounded-md border p-3"
+      style={{
+        background: "var(--panel-bg)",
+        borderColor: "var(--panel-border)",
+      }}
+    >
+      {/* Tabs Header */}
+      <div className="mb-3 flex items-center gap-2 text-[11px]">
+        <div
+          className="flex overflow-hidden rounded border"
+          style={{ borderColor: "var(--chip-border)" }}
+        >
+          {(["positions", "trades", "decisions"] as TabType[]).map((tab) => (
+            <button
+              key={tab}
+              className="px-3 py-1.5 chip-btn uppercase"
+              style={
+                activeTab === tab
+                  ? {
+                      background: "var(--btn-active-bg)",
+                      color: "var(--btn-active-fg)",
+                    }
+                  : { color: "var(--btn-inactive-fg)" }
+              }
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Filter */}
+      <div className="mb-3">
+        <label
+          className="text-xs mb-1 block tracking-wider"
+          style={{ color: "var(--muted-text)" }}
+        >
+          FILTER:
+        </label>
+        <select
+          value={filterAgent}
+          onChange={(e) => setFilterAgent(e.target.value)}
+          className="w-full px-2 py-1.5 rounded border text-xs chip-btn"
+          style={{
+            background: "var(--panel-bg)",
+            borderColor: "var(--chip-border)",
+            color: "var(--foreground)",
+          }}
+        >
+          <option value="all">ALL AGENTS</option>
+          {agents.map((agent) => (
+            <option key={agent.id} value={agent.id}>
+              {agent.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto">
+            {activeTab === "positions" ? (
+              <PositionsContent agents={agents} filterAgent={filterAgent} />
+            ) : activeTab === "trades" ? (
+              <TradesContent agents={agents} filterAgent={filterAgent} />
+            ) : (
+              <DecisionsContent agents={agents} filterAgent={filterAgent} />
+            )}
+          </div>
+    </div>
+  );
+}
+
+function PositionsContent({
+  agents,
+  filterAgent,
+}: {
+  agents: Agent[];
+  filterAgent: string;
+}) {
+  // Only show running agents
+  const runningAgents = agents.filter(a => a.is_running);
+  const filteredAgents =
+    filterAgent === "all" ? runningAgents : runningAgents.filter((a) => a.id === filterAgent);
+
+  // Fetch positions for filtered agents
+  const positionsData = filteredAgents.map((agent) => {
+    const { data } = useSWR(`/agent/${agent.id}/positions`, () =>
+      api.getPositions(agent.id), { refreshInterval: 10000 }
+    );
+    return { agent, positions: data || [] };
+  });
+
+  // Calculate total positions
+  const totalPositions = positionsData.reduce((sum, d) => sum + d.positions.length, 0);
+
+  if (totalPositions === 0) {
+    return (
+      <div className="text-center py-12" style={{ color: "var(--muted-text)" }}>
+        <div className="text-4xl mb-2 opacity-50">📊</div>
+        <p className="text-sm">No active positions</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Total count */}
+      <p className="text-xs" style={{ color: "var(--muted-text)" }}>
+        {totalPositions} Position{totalPositions > 1 ? "s" : ""}
+      </p>
+
+      {/* Each Agent as a Card */}
+      {positionsData.map(({ agent, positions }) => {
+        if (positions.length === 0) return null;
+
+        // Calculate total PnL for this agent
+        const totalPnL = positions.reduce((sum, p) => sum + (p.unrealized_profit || 0), 0);
+        
+        // Get model color
+        const color = getModelColor(agent.id);
+        const brandBg = `linear-gradient(0deg, ${color}10, var(--panel-bg))`;
+        const brandBorder = `${color}55`;
+
+        return (
+          <div 
+            key={agent.id} 
+            className="rounded-md border p-3"
+            style={{
+              background: brandBg as any,
+              borderColor: brandBorder as any,
+            }}
+          >
+            {/* Model Header */}
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span 
+                  className="text-xs font-semibold uppercase tracking-wider" 
+                  style={{ color: "var(--foreground)" }}
+                >
+                  {getModelName(agent.id)}
+                </span>
+                <span 
+                  className="text-[10px] px-1.5 py-0.5 rounded" 
+                  style={{ 
+                    background: "rgba(0, 0, 0, 0.2)",
+                    color: "var(--muted-text)" 
+                  }}
+                >
+                  {positions.length}
+                </span>
+              </div>
+              <div
+                className="text-xs font-bold tabular-nums"
+                style={{ color: totalPnL >= 0 ? "#22c55e" : "#ef4444" }}
+              >
+                {totalPnL >= 0 ? "+" : ""}{fmtUSD(totalPnL)}
+              </div>
+            </div>
+
+            {/* Positions Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[11px] terminal-text">
+                <thead style={{ color: "var(--muted-text)" }}>
+                  <tr className="border-b" style={{ borderColor: "var(--panel-border)" }}>
+                    <th className="py-1.5 pr-2 font-normal">Symbol</th>
+                    <th className="py-1.5 pr-2 font-normal">Side</th>
+                    <th className="py-1.5 pr-2 font-normal">Lev</th>
+                    <th className="py-1.5 pr-2 font-normal">Entry</th>
+                    <th className="py-1.5 pr-2 font-normal">Mark</th>
+                    <th className="py-1.5 pr-2 font-normal text-right">PnL</th>
+                  </tr>
+                </thead>
+                <tbody style={{ color: "var(--foreground)" }}>
+                  {positions.map((position, index) => {
+                    const pnlPct = (position.unrealized_profit / (position.entry_price * position.position_amt)) * 100;
+                    
+                    return (
+                      <tr 
+                        key={`${agent.id}-${position.symbol}-${index}`}
+                        className="border-b"
+                        style={{ 
+                          borderColor: "color-mix(in oklab, var(--panel-border) 30%, transparent)" 
+                        }}
+                      >
+                        <td className="py-1.5 pr-2">
+                          <div className="flex items-center gap-1">
+                            {getCoinIcon(position.symbol) && (
+                              <img
+                                src={getCoinIcon(position.symbol)}
+                                alt={position.symbol}
+                                className="w-3.5 h-3.5"
+                              />
+                            )}
+                            <span className="font-bold">{position.symbol}</span>
+                          </div>
+                        </td>
+                        <td 
+                          className="py-1.5 pr-2"
+                          style={{ 
+                            color: position.side === "long" ? "#22c55e" : "#ef4444" 
+                          }}
+                        >
+                          {position.side.toUpperCase()}
+                        </td>
+                        <td className="py-1.5 pr-2">
+                          <span style={{ color: "var(--brand-accent)" }}>
+                            {position.leverage}x
+                          </span>
+                        </td>
+                        <td className="py-1.5 pr-2 tabular-nums">
+                          {fmtUSD(position.entry_price)}
+                        </td>
+                        <td className="py-1.5 pr-2 tabular-nums">
+                          {fmtUSD(position.mark_price)}
+                        </td>
+                        <td 
+                          className="py-1.5 pr-2 text-right"
+                          style={{ 
+                            color: position.unrealized_profit >= 0 ? "#22c55e" : "#ef4444" 
+                          }}
+                        >
+                          <div className="font-bold tabular-nums">
+                            {fmtUSD(position.unrealized_profit)}
+                          </div>
+                          <div className="text-[10px] tabular-nums">
+                            {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TradesContent({
+  agents,
+  filterAgent,
+}: {
+  agents: Agent[];
+  filterAgent: string;
+}) {
+  // Only show running agents
+  const runningAgents = agents.filter(a => a.is_running);
+  const filteredAgents =
+    filterAgent === "all" ? runningAgents : runningAgents.filter((a) => a.id === filterAgent);
+
+  // Fetch trades for filtered agents
+  const tradesDataQueries = filteredAgents.map((agent) => {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const { data } = useSWR(`/agent/${agent.id}/trades`, () =>
+      api.getTrades(agent.id), { refreshInterval: 30000 }
+    );
+    return { agent, trades: data || [] };
+  });
+
+  const allTrades = tradesDataQueries.flatMap((d) =>
+    d.trades.map((t: any) => ({ ...t, agentName: d.agent.name, agentId: d.agent.id }))
+  );
+
+  // Sort by close time (most recent first)
+  allTrades.sort((a, b) => {
+    const timeA = new Date(a.close_time).getTime();
+    const timeB = new Date(b.close_time).getTime();
+    return timeB - timeA;
+  });
+
+  if (allTrades.length === 0) {
+    return (
+      <div className="text-center py-12" style={{ color: "var(--muted-text)" }}>
+        <div className="text-4xl mb-2 opacity-50">📜</div>
+        <p className="text-sm">No completed trades yet</p>
+        <p className="text-xs mt-1">Trades will appear after positions are closed</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs mb-2" style={{ color: "var(--muted-text)" }}>
+        {allTrades.length} Trade{allTrades.length > 1 ? "s" : ""}
+      </p>
+      {allTrades.slice(0, 20).map((trade: any, index: number) => {
+        const pnl = trade.pnl_usdt || 0;
+        const pnlPct = trade.pnl_pct || 0;
+        const isProfit = pnl >= 0;
+
+        return (
+          <div
+            key={`${trade.agentId}-${trade.symbol}-${index}`}
+            className="rounded border p-2.5 transition-colors hover:bg-opacity-50"
+            style={{
+              borderColor: "var(--chip-border)",
+              background: "rgba(255, 255, 255, 0.02)",
+            }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex-1">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  {getCoinIcon(trade.symbol) && (
+                    <img
+                      src={getCoinIcon(trade.symbol)}
+                      alt={trade.symbol}
+                      className="w-4 h-4"
+                    />
+                  )}
+                  <span className="font-bold terminal-text text-sm" style={{ color: "var(--foreground)" }}>
+                    {trade.symbol}
+                  </span>
+                  <span
+                    className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase"
+                    style={{
+                      background: trade.side === "long" ? "rgba(34, 197, 94, 0.15)" : "rgba(239, 68, 68, 0.15)",
+                      color: trade.side === "long" ? "#22c55e" : "#ef4444",
+                    }}
+                  >
+                    {trade.side}
+                  </span>
+                </div>
+                <p className="text-[10px]" style={{ color: "var(--muted-text)" }}>
+                  {trade.agentName}
+                </p>
+              </div>
+              <div className="text-right">
+                <div
+                  className="text-sm font-bold tabular-nums"
+                  style={{ color: isProfit ? "#22c55e" : "#ef4444" }}
+                >
+                  {isProfit ? "+" : ""}{fmtUSD(pnl)}
+                </div>
+                <div
+                  className="text-[10px] tabular-nums"
+                  style={{ color: isProfit ? "#22c55e" : "#ef4444" }}
+                >
+                  {isProfit ? "+" : ""}{pnlPct.toFixed(2)}%
+                </div>
+              </div>
+            </div>
+
+            {/* Trade Details */}
+            <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
+              <div>
+                <span style={{ color: "var(--muted-text)" }}>Entry:</span>
+                <span className="ml-1 tabular-nums" style={{ color: "var(--foreground)" }}>
+                  {fmtUSD(trade.entry_price)}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: "var(--muted-text)" }}>Exit:</span>
+                <span className="ml-1 tabular-nums" style={{ color: "var(--foreground)" }}>
+                  {fmtUSD(trade.close_price)}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: "var(--muted-text)" }}>Qty:</span>
+                <span className="ml-1 tabular-nums" style={{ color: "var(--foreground)" }}>
+                  {trade.quantity?.toFixed(4)}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: "var(--muted-text)" }}>Lev:</span>
+                <span className="ml-1 font-bold" style={{ color: "var(--brand-accent)" }}>
+                  {trade.leverage}x
+                </span>
+              </div>
+            </div>
+
+            {/* Time */}
+            <div className="mt-1.5 pt-1.5 border-t text-[10px]" style={{ borderColor: "var(--panel-border)" }}>
+              <span style={{ color: "var(--muted-text)" }}>
+                Closed: {new Date(trade.close_time).toLocaleString()}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DecisionsContent({
+  agents,
+  filterAgent,
+}: {
+  agents: Agent[];
+  filterAgent: string;
+}) {
+  const [expandedDecisions, setExpandedDecisions] = useState<Set<string>>(new Set());
+
+  // Only show running agents
+  const runningAgents = agents.filter(a => a.is_running);
+  const filteredAgents =
+    filterAgent === "all" ? runningAgents : runningAgents.filter((a) => a.id === filterAgent);
+
+  // Fetch decisions for filtered agents
+  const decisionsDataQueries = filteredAgents.map((agent) => {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const { data } = useSWR(`/agent/${agent.id}/decisions`, () =>
+      api.getDecisions(agent.id, 10), { refreshInterval: 10000 }
+    );
+    return { agent, decisions: data || [] };
+  });
+
+  const allDecisions = decisionsDataQueries.flatMap((d) =>
+    d.decisions.map((dec: any) => ({ ...dec, agentName: d.agent.name, agentId: d.agent.id }))
+  );
+
+  // Sort by cycle_number (higher number = more recent)
+  allDecisions.sort((a, b) => {
+    const cycleA = a.cycle_number || 0;
+    const cycleB = b.cycle_number || 0;
+    return cycleB - cycleA;
+  });
+
+  const toggleExpanded = (key: string) => {
+    setExpandedDecisions(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(key)) {
+        newSet.delete(key);
+      } else {
+        newSet.add(key);
+      }
+      return newSet;
+    });
+  };
+
+  if (allDecisions.length === 0) {
+    return (
+      <div className="text-center py-12" style={{ color: "var(--muted-text)" }}>
+        <div className="text-4xl mb-2 opacity-50">🤖</div>
+        <p className="text-sm">No decisions yet</p>
+        <p className="text-xs mt-1">AI decisions will appear here</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs mb-2" style={{ color: "var(--muted-text)" }}>
+        {allDecisions.length} Decision{allDecisions.length > 1 ? "s" : ""}
+      </p>
+      {allDecisions.slice(0, 15).map((decision: any, index: number) => {
+        const color = getModelColor(decision.agentId);
+        const brandBg = `linear-gradient(0deg, ${color}10, var(--panel-bg))`;
+        const brandBorder = `${color}55`;
+        const decisionKey = `${decision.agentId}-${decision.cycle_number}`;
+        const isExpanded = expandedDecisions.has(decisionKey);
+
+        return (
+          <div
+            key={`${decision.agentId}-${decision.cycle_number}-${index}`}
+            className="rounded border p-2.5 transition-colors"
+            style={{
+              borderColor: brandBorder,
+              background: brandBg as any,
+            }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex-1">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <span
+                    className="text-xs font-bold px-1.5 py-0.5 rounded"
+                    style={{
+                      background: "rgba(0, 0, 0, 0.2)",
+                      color: color,
+                    }}
+                  >
+                    #{decision.cycle_number}
+                  </span>
+                  <span className="text-[10px]" style={{ color: "var(--muted-text)" }}>
+                    {decision.agentName}
+                  </span>
+                </div>
+                <p className="text-[10px]" style={{ color: "var(--muted-text)" }}>
+                  {new Date(decision.timestamp).toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                  })}
+                </p>
+              </div>
+              {decision.account_state && (
+                <div className="text-right">
+                  <div className="text-[10px]" style={{ color: "var(--muted-text)" }}>
+                    Balance
+                  </div>
+                  <div
+                    className="text-xs font-bold tabular-nums"
+                    style={{ color: "var(--foreground)" }}
+                  >
+                    ${decision.account_state.total_wallet_balance.toFixed(2)}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            {decision.decisions && decision.decisions.length > 0 && (
+              <div className="space-y-1 mb-2">
+                {decision.decisions.map((dec: any, decIdx: number) => (
+                  <div
+                    key={decIdx}
+                    className="flex items-center gap-1.5 text-[11px]"
+                  >
+                    <span
+                      className="px-1.5 py-0.5 rounded font-bold uppercase text-[10px] flex-shrink-0"
+                      style={{
+                        background:
+                          dec.action === "open_long"
+                            ? "rgba(34, 197, 94, 0.15)"
+                            : dec.action === "open_short"
+                            ? "rgba(239, 68, 68, 0.15)"
+                            : dec.action === "close_position"
+                            ? "rgba(245, 158, 11, 0.15)"
+                            : "rgba(100, 116, 139, 0.15)",
+                        color:
+                          dec.action === "open_long"
+                            ? "#22c55e"
+                            : dec.action === "open_short"
+                            ? "#ef4444"
+                            : dec.action === "close_position"
+                            ? "#f59e0b"
+                            : "var(--muted-text)",
+                      }}
+                    >
+                      {dec.action.replace("_", " ")}
+                    </span>
+                    {dec.symbol && (
+                      <div className="flex items-center gap-1">
+                        {getCoinIcon(dec.symbol) && (
+                          <img
+                            src={getCoinIcon(dec.symbol)}
+                            alt={dec.symbol}
+                            className="w-3 h-3"
+                          />
+                        )}
+                        <span
+                          className="font-bold"
+                          style={{ color: "var(--foreground)" }}
+                        >
+                          {dec.symbol}
+                        </span>
+                      </div>
+                    )}
+                    {dec.leverage && (
+                      <span style={{ color: "var(--brand-accent)" }}>
+                        {dec.leverage}x
+                      </span>
+                    )}
+                    {dec.position_size_usd && (
+                      <span style={{ color: "var(--muted-text)" }}>
+                        ${dec.position_size_usd.toFixed(0)}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Chain of Thought */}
+            {decision.chain_of_thought && (
+              <div className="relative">
+                <div
+                  className={`text-[11px] leading-relaxed terminal-text whitespace-pre-wrap ${
+                    isExpanded ? "" : "line-clamp-3"
+                  }`}
+                  style={{
+                    color: "var(--muted-text)",
+                    ...(!isExpanded && {
+                      display: "-webkit-box",
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                    }),
+                  }}
+                >
+                  {decision.chain_of_thought}
+                </div>
+                {decision.chain_of_thought.length > 150 && (
+                  <button
+                    onClick={() => toggleExpanded(decisionKey)}
+                    className="text-[10px] mt-1 italic hover:underline"
+                    style={{ color: "var(--brand-accent)" }}
+                  >
+                    {isExpanded ? "Show less" : "Show more"}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+

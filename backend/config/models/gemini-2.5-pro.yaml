@@ -1,0 +1,49 @@
+# Gemini 2.5 Pro Configuration
+
+agent:
+  id: "gemini-2.5-pro"
+  name: "GEMINI 2.5 PRO"
+  description: "Gemini 2.5 Pro trading agent"
+
+llm:
+  provider: "google"
+  api_key: "${GOOGLE_API_KEY}"
+  model: "gemini-2.5-pro"
+  temperature: 0.15
+  max_tokens: 4000
+
+exchange:
+  type: "aster"
+  # Each model uses its own account credentials
+  user: "${ASTER_USER_GEMINI}"
+  signer: "${ASTER_SIGNER_GEMINI}"
+  private_key: "${ASTER_PRIVATE_KEY_GEMINI}"
+  testnet: false
+
+strategy:
+  initial_balance: 10000.0
+  scan_interval_minutes: 3
+  
+  max_account_usage_pct: 100
+  
+  default_coins:
+    - "BTCUSDT"
+    - "ETHUSDT"
+    - "SOLUSDT"
+    - "BNBUSDT"
+    - "DOGEUSDT"
+    - "XRPUSDT"
+  
+  risk_management:
+    max_positions: 3
+    max_leverage: 10
+    max_position_size_pct: 25
+    max_total_position_pct: 75
+    max_single_trade_pct: 40
+    max_single_trade_with_positions_pct: 25
+    max_daily_loss_pct: 12
+    stop_loss_pct: 3
+    take_profit_pct: 10
+  
+  trading_style: "balanced"
+

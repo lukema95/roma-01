@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      # Aster DEX
+      - ASTER_USER=${ASTER_USER}
+      - ASTER_SIGNER=${ASTER_SIGNER}
+      - ASTER_PRIVATE_KEY=${ASTER_PRIVATE_KEY}
+      
+      # LLM APIs
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - QWEN_API_KEY=${QWEN_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      
+      # API Config
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - CORS_ORIGINS=http://localhost:3000
+    volumes:
+      - ./backend/config:/app/config
+      - ./backend/logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  logs:
+

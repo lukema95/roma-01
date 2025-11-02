@@ -1,0 +1,336 @@
+"""
+FastAPI application with REST API and WebSocket support.
+
+Endpoints:
+- GET /api/agents - List all agents
+- GET /api/agents/{id} - Get agent info
+- GET /api/agents/{id}/account - Get account info
+- GET /api/agents/{id}/positions - Get positions
+- GET /api/agents/{id}/performance - Get performance metrics
+- GET /api/agents/{id}/analytics - Get detailed analytics
+- GET /api/agents/{id}/decisions - Get decision logs
+- GET /api/agents/{id}/equity-history - Get equity curve
+- GET /api/agents/{id}/trades - Get trade history
+- GET /api/market/prices - Get current market prices
+- WS /ws/agents/{id} - Real-time updates
+"""
+
+import asyncio
+from typing import Optional
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+from loguru import logger
+
+from roma_trading.config import get_settings
+from roma_trading.agents import AgentManager
+from roma_trading.core.analytics import TradingAnalytics
+
+
+# Global agent manager
+agent_manager = AgentManager()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager."""
+    # Startup
+    logger.info("Starting ROMA-01 Trading Platform...")
+    
+    try:
+        await agent_manager.load_agents_from_config()
+        asyncio.create_task(agent_manager.start_all())
+        logger.info("All agents started successfully")
+    except Exception as e:
+        logger.error(f"Failed to start agents: {e}", exc_info=True)
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down...")
+    await agent_manager.stop_all()
+
+
+# Create FastAPI app
+app = FastAPI(
+    title="ROMA-01 Trading API",
+    description="AI-powered cryptocurrency futures trading platform",
+    version="1.1.0",
+    lifespan=lifespan,
+)
+
+# CORS middleware
+settings = get_settings()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/")
+async def root():
+    """API root endpoint."""
+    return {
+        "name": "ROMA-01 Trading API",
+        "version": "1.1.0",
+        "status": "running",
+    }
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "healthy"}
+
+
+@app.get("/api/agents")
+async def get_agents():
+    """Get list of all trading agents."""
+    return agent_manager.get_all_agents()
+
+
+@app.get("/api/agents/{agent_id}")
+async def get_agent_info(agent_id: str):
+    """Get detailed agent information."""
+    try:
+        agent = agent_manager.get_agent(agent_id)
+        return agent.get_status()
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.get("/api/agents/{agent_id}/account")
+async def get_account(agent_id: str):
+    """Get agent's account balance."""
+    try:
+        agent = agent_manager.get_agent(agent_id)
+        return await agent.dex.get_account_balance()
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/agents/{agent_id}/positions")
+async def get_positions(agent_id: str):
+    """Get agent's current positions."""
+    try:
+        agent = agent_manager.get_agent(agent_id)
+        return await agent.dex.get_positions()
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/agents/{agent_id}/performance")
+async def get_performance(agent_id: str, lookback: int = 20):
+    """Get agent's performance metrics."""
+    try:
+        agent = agent_manager.get_agent(agent_id)
+        trades = agent.logger_module.get_trade_history()
+        return agent.performance.calculate_metrics(trades, lookback=lookback)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.get("/api/agents/{agent_id}/analytics")
+async def get_analytics(agent_id: str):
+    """
+    Get agent's detailed trading analytics.
+    
+    Returns comprehensive analytics including:
+    - Trade size statistics (avg, median)
+    - Holding period statistics (avg, median)  
+    - Leverage statistics (avg, median)
+    - Confidence statistics (avg, median)
+    - Position type distribution (% long, % short, % flat)
+    - Win rate, expectancy
+    - Biggest win/loss
+    """
+    try:
+        agent = agent_manager.get_agent(agent_id)
+        trades = agent.logger_module.get_trade_history()
+        decisions = agent.logger_module.get_recent_decisions(limit=100)
+        
+        analytics = TradingAnalytics.calculate_analytics(trades, decisions)
+        
+        return analytics
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to calculate analytics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/agents/{agent_id}/decisions")
+async def get_decisions(agent_id: str, limit: int = 20):
+    """Get agent's recent decision logs."""
+    try:
+        agent = agent_manager.get_agent(agent_id)
+        return agent.logger_module.get_recent_decisions(limit=limit)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.get("/api/agents/{agent_id}/equity-history")
+async def get_equity_history(agent_id: str, limit: Optional[int] = None):
+    """Get agent's equity curve history."""
+    try:
+        agent = agent_manager.get_agent(agent_id)
+        return agent.logger_module.get_equity_history(limit=limit)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.get("/api/agents/{agent_id}/trades")
+async def get_trade_history(
+    agent_id: str, 
+    limit: Optional[int] = None,
+    source: str = "local"  # "local" (from logs, recommended) or "api" (from exchange, requires HMAC auth)
+):
+    """
+    Get agent's completed trade history.
+    
+    Args:
+        agent_id: Agent identifier
+        limit: Max number of trades to return
+        source: Data source - "local" (from logs, recommended) or "api" (from exchange)
+    
+    Returns:
+        List of completed trades with PnL, prices, quantities, etc.
+    
+    Note:
+        - "local" mode uses our persistent trade logs (recommended)
+        - "api" mode requires HMAC SHA256 authentication (not yet implemented for V3 wallets)
+    """
+    try:
+        agent = agent_manager.get_agent(agent_id)
+        
+        if source == "api":
+            # Note: /fapi/v1/userTrades requires HMAC SHA256 signature
+            # Our V3 wallet uses EIP-191 signature, which is incompatible
+            # This would need separate HMAC API key configuration
+            logger.warning(
+                f"API source requested but not supported with V3 wallet authentication. "
+                f"Falling back to local logs."
+            )
+            return agent.logger_module.get_trade_history(limit=limit)
+        else:
+            # Get trades from local persistent logs (recommended)
+            logger.debug(f"Fetching trades from local logs for agent {agent_id}")
+            return agent.logger_module.get_trade_history(limit=limit)
+            
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to fetch trade history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/market/prices")
+async def get_market_prices(symbols: Optional[str] = None):
+    """
+    Get current market prices for specified symbols.
+    
+    Args:
+        symbols: Comma-separated list of symbols (e.g., "BTCUSDT,ETHUSDT")
+                 If not provided, returns default trading pairs.
+    """
+    try:
+        # Get default symbols from any active agent
+        if not symbols:
+            default_symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "DOGEUSDT", "XRPUSDT"]
+        else:
+            default_symbols = [s.strip() for s in symbols.split(",")]
+        
+        # Get any agent to access DEX
+        agents_list = agent_manager.get_all_agents()
+        if not agents_list:
+            raise HTTPException(status_code=503, detail="No agents available")
+        
+        agent = agent_manager.get_agent(agents_list[0]["id"])
+        
+        prices = []
+        for symbol in default_symbols:
+            try:
+                price = await agent.dex.get_market_price(symbol)
+                prices.append({
+                    "symbol": symbol.replace("USDT", ""),  # BTC, ETH, etc.
+                    "fullSymbol": symbol,
+                    "price": price
+                })
+            except Exception as e:
+                logger.warning(f"Failed to fetch price for {symbol}: {e}")
+        
+        return prices
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to fetch market prices: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.websocket("/ws/agents/{agent_id}")
+async def websocket_endpoint(websocket: WebSocket, agent_id: str):
+    """
+    WebSocket endpoint for real-time updates.
+    
+    Pushes account, positions, and performance data every 5 seconds.
+    """
+    await websocket.accept()
+    logger.info(f"WebSocket connected for agent {agent_id}")
+    
+    try:
+        agent = agent_manager.get_agent(agent_id)
+        
+        while True:
+            try:
+                # Fetch current data
+                account = await agent.dex.get_account_balance()
+                positions = await agent.dex.get_positions()
+                trades = agent.logger_module.get_trade_history()
+                performance = agent.performance.calculate_metrics(trades)
+                
+                # Send to client
+                data = {
+                    "timestamp": asyncio.get_event_loop().time(),
+                    "account": account,
+                    "positions": positions,
+                    "performance": performance,
+                    "status": agent.get_status(),
+                }
+                
+                await websocket.send_json(data)
+                
+                # Wait 5 seconds
+                await asyncio.sleep(5)
+                
+            except Exception as e:
+                logger.error(f"Error in WebSocket loop: {e}")
+                break
+                
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for agent {agent_id}")
+    except ValueError as e:
+        logger.error(f"Agent not found: {e}")
+        await websocket.close(code=1008, reason=str(e))
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}", exc_info=True)
+        await websocket.close(code=1011, reason="Internal error")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    
+    uvicorn.run(
+        "roma_trading.api.main:app",
+        host=settings.api_host,
+        port=settings.api_port,
+        reload=True,
+        log_level="info",
+    )
+
