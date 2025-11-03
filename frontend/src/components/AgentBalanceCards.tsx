@@ -88,12 +88,12 @@ function AgentCard({
         </div>
         <div
           className={`px-2 py-1 rounded-full text-xs font-medium ${
-            agent.status.is_running
+            agent.is_running
               ? "bg-green-100 text-green-700"
               : "bg-gray-100 text-gray-500"
           }`}
         >
-          {agent.status.is_running ? "● LIVE" : "○ OFF"}
+          {agent.is_running ? "● LIVE" : "○ OFF"}
         </div>
       </div>
 
@@ -102,7 +102,7 @@ function AgentCard({
         {agent.name}
       </h3>
       <p className="text-xs text-gray-500 mb-3">
-        Cycles: {agent.status.cycle_count}
+        Cycles: {agent.cycle_count} • Runtime: {agent.runtime_minutes}m
       </p>
 
       {/* Balance */}
