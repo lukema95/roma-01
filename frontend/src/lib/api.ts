@@ -78,6 +78,40 @@ export const api = {
     const url = `/api/market/prices?symbols=${symbols.join(",")}`;
     return fetcher(url);
   },
+  
+  // Get custom prompts for an agent
+  getCustomPrompts: async (agentId: string): Promise<any> => {
+    const response = await fetch(`${API_BASE}/api/agents/${agentId}/prompts`);
+    const data = await response.json();
+    if (data.status === "success") {
+      return data.data;
+    }
+    throw new Error("Failed to load custom prompts");
+  },
+  
+  // Update custom prompts for an agent
+  updateCustomPrompts: async (agentId: string, prompts: any): Promise<any> => {
+    const response = await fetch(`${API_BASE}/api/agents/${agentId}/prompts`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(prompts),
+    });
+    const data = await response.json();
+    if (data.status !== "success") {
+      throw new Error(data.message || "Failed to save prompts");
+    }
+    return data;
+  },
+  
+  // Get full prompt preview (core rules + custom prompts)
+  getFullPromptPreview: async (agentId: string): Promise<string> => {
+    const response = await fetch(`${API_BASE}/api/agents/${agentId}/prompts/preview`);
+    const data = await response.json();
+    if (data.status === "success") {
+      return data.data.full_prompt;
+    }
+    throw new Error("Failed to load prompt preview");
+  },
 };
 
 // WebSocket connection for real-time updates

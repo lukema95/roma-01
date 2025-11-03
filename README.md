@@ -20,6 +20,7 @@ This platform features a **NOF1-inspired frontend interface** ([nof1.ai](https:/
 - 📊 **Performance Visualization**: Track account values, P/L, and trading metrics across all models
 - 🎨 **Model Showcase**: Display up to 6 different LLM models (DeepSeek, Qwen, Claude, Grok, Gemini, GPT) running simultaneously
 - 📈 **Live Trading Dashboard**: Monitor positions, completed trades, and AI decision-making processes
+- 📝 **Custom Prompts**: User-defined trading strategies
 
 The interface provides a transparent view into how different AI models perform in live trading scenarios, similar to how NOF1 demonstrates model capabilities through competitive evaluation.
 
@@ -70,10 +71,12 @@ ROMA is a **meta-agent framework** that uses recursive hierarchical structures t
 - 📊 **Monitoring Dashboard**: Next.js web interface for tracking agents and positions
 - 📈 **Performance Tracking**: Comprehensive metrics and decision history
 - 🔐 **Production Ready**: Secure, tested, and battle-hardened
+- 📝 **Custom Prompts**: User-defined trading strategies
 
 ### Frontend Status
 - ✅ Agent overview and status monitoring
 - ✅ Position tracking with real-time P/L
+- ✅ Custom prompts for each agent
 - ✅ Decision history and AI reasoning
 - ✅ Performance metrics and charts
 - ⚠️ WebSocket real-time updates (implemented, integration pending)
@@ -335,6 +338,24 @@ Each model has its own configuration file and dedicated trading account:
 
 ---
 
+## 📡 Data Sources & Analysis
+
+### Current Implementation
+- ✅ **Technical Analysis**: K-line, RSI, MACD, EMA, ATR, Bollinger Bands, Volume
+
+### Planned Enhancements
+The platform is designed to integrate multiple information sources for comprehensive market analysis:
+
+- 🔜 **News Sentiment**: Crypto news aggregation and sentiment scoring
+- 🔜 **Social Intelligence**: Twitter/Reddit sentiment and Fear & Greed Index
+- 🔜 **On-Chain Data**: Whale tracking, exchange flows, network metrics
+- 🔜 **Macro Economics**: Fed policy, inflation data, market correlations
+- 🔜 **Market Microstructure**: Order book depth, funding rates, liquidations
+
+**ROMA Framework Advantage**: When multi-source analysis is implemented, ROMA's parallel execution architecture will enable simultaneous processing of all data sources, providing faster decisions with complete transparency and fault tolerance.
+
+---
+
 ## 📈 Risk Management System
 
 ### 4-Layer Protection
@@ -472,10 +493,13 @@ roma-01/
 
 - ✅ **Backend**: Production ready
 - ✅ **Frontend**: Production ready
-- ✅ **Risk Management**: Fully implemented
+- ✅ **Risk Management**: Fully implemented (4-layer system)
 - ✅ **Aster DEX**: Integrated & tested
-- 🔜 **Hyperliquid**: Coming soon
-- 🔜 **Backtesting**: Coming soon
+- ✅ **Technical Analysis**: RSI, MACD, BB, EMA, ATR
+- 🔜 **Multi-Source Analysis**: News, social, on-chain, macro data
+- 🔜 **ROMA Integration**: Full hierarchical decision architecture
+- 🔜 **Hyperliquid DEX**: Additional exchange support
+- 🔜 **Backtesting**: Strategy testing and optimization
 
 ---
 

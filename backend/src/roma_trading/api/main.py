@@ -19,8 +19,11 @@ import asyncio
 from typing import Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from loguru import logger
+import yaml
+import os
 
 from roma_trading.config import get_settings
 from roma_trading.agents import AgentManager
@@ -321,6 +324,159 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
     except Exception as e:
         logger.error(f"WebSocket error: {e}", exc_info=True)
         await websocket.close(code=1011, reason="Internal error")
+
+
+# ============================================
+# Custom Prompts API
+# ============================================
+
+class CustomPromptUpdate(BaseModel):
+    """Custom prompt update request model"""
+    enabled: Optional[bool] = None
+    trading_philosophy: Optional[str] = None
+    entry_preferences: Optional[str] = None
+    position_management: Optional[str] = None
+    market_preferences: Optional[str] = None
+    additional_rules: Optional[str] = None
+
+
+@app.get("/api/agents/{agent_id}/prompts")
+async def get_custom_prompts(agent_id: str):
+    """
+    Get agent's custom prompt configuration
+    
+    Args:
+        agent_id: Agent identifier
+    
+    Returns:
+        Custom prompts configuration object
+    """
+    try:
+        agent = agent_manager.get_agent(agent_id)
+        
+        custom_prompts = agent.config.get("strategy", {}).get("custom_prompts", {
+            "enabled": False,
+            "trading_philosophy": "",
+            "entry_preferences": "",
+            "position_management": "",
+            "market_preferences": "",
+            "additional_rules": ""
+        })
+        
+        return {
+            "status": "success",
+            "data": custom_prompts
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to get custom prompts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/agents/{agent_id}/prompts/preview")
+async def get_full_prompt_preview(agent_id: str):
+    """
+    Get the complete system prompt that will be sent to AI
+    
+    Args:
+        agent_id: Agent identifier
+    
+    Returns:
+        Complete system prompt including core rules and custom prompts
+    """
+    try:
+        agent = agent_manager.get_agent(agent_id)
+        
+        # Build the actual system prompt using agent's method
+        full_prompt = agent._build_system_prompt()
+        
+        return {
+            "status": "success",
+            "data": {
+                "full_prompt": full_prompt,
+                "length": len(full_prompt)
+            }
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to build prompt preview: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/agents/{agent_id}/prompts")
+async def update_custom_prompts(agent_id: str, prompts: CustomPromptUpdate):
+    """
+    Update agent's custom prompts
+    
+    Configuration is saved to YAML file immediately and takes effect in next trading cycle
+    
+    Args:
+        agent_id: Agent identifier
+        prompts: Custom prompts configuration
+    
+    Returns:
+        Update result and new configuration
+    """
+    try:
+        # Get agent
+        agent = agent_manager.get_agent(agent_id)
+        
+        # Find config file path using Path for better cross-platform support
+        from pathlib import Path
+        
+        # Try relative path first (when running from backend/)
+        config_path = Path("config/models") / f"{agent_id}.yaml"
+        
+        if not config_path.exists():
+            # Try from project root
+            config_path = Path("backend/config/models") / f"{agent_id}.yaml"
+        
+        if not config_path.exists():
+            logger.error(f"Config file not found for agent {agent_id} at {config_path}")
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Config file not found: {agent_id}.yaml"
+            )
+        
+        logger.debug(f"Using config file: {config_path.absolute()}")
+        
+        # Read current configuration
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+        
+        # Ensure custom_prompts section exists
+        if "custom_prompts" not in config["strategy"]:
+            config["strategy"]["custom_prompts"] = {}
+        
+        # Update fields
+        for field, value in prompts.dict(exclude_unset=True).items():
+            if value is not None:
+                config["strategy"]["custom_prompts"][field] = value
+        
+        # Save configuration to file
+        with open(config_path, "w", encoding="utf-8") as f:
+            yaml.dump(config, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+        
+        # Update in-memory configuration (takes effect immediately)
+        agent.config["strategy"]["custom_prompts"] = config["strategy"]["custom_prompts"]
+        
+        logger.info(f"Updated custom prompts for agent {agent_id}")
+        
+        return {
+            "status": "success",
+            "message": f"Custom prompts updated for agent {agent_id}. Will take effect in next trading cycle.",
+            "data": config["strategy"]["custom_prompts"]
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to update custom prompts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

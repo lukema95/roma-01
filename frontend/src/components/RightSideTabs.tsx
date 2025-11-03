@@ -7,12 +7,13 @@ import type { Agent, Position } from "@/types";
 import { fmtUSD, fmtPercent } from "@/lib/utils/formatters";
 import { getModelColor, getModelName } from "@/lib/model/meta";
 import { getCoinIcon } from "@/lib/utils/coinIcons";
+import PromptEditor from "./PromptEditor";
 
 interface RightSideTabsProps {
   agents: Agent[];
 }
 
-type TabType = "positions" | "trades" | "decisions";
+type TabType = "positions" | "trades" | "decisions" | "prompts";
 
 export function RightSideTabs({ agents }: RightSideTabsProps) {
   const [activeTab, setActiveTab] = useState<TabType>("positions");
@@ -32,7 +33,7 @@ export function RightSideTabs({ agents }: RightSideTabsProps) {
           className="flex overflow-hidden rounded border"
           style={{ borderColor: "var(--chip-border)" }}
         >
-          {(["positions", "trades", "decisions"] as TabType[]).map((tab) => (
+          {(["positions", "trades", "decisions", "prompts"] as TabType[]).map((tab) => (
             <button
               key={tab}
               className="px-3 py-1.5 chip-btn uppercase"
@@ -52,32 +53,62 @@ export function RightSideTabs({ agents }: RightSideTabsProps) {
         </div>
       </div>
 
-      {/* Filter */}
-      <div className="mb-3">
-        <label
-          className="text-xs mb-1 block tracking-wider"
-          style={{ color: "var(--muted-text)" }}
-        >
-          FILTER:
-        </label>
-        <select
-          value={filterAgent}
-          onChange={(e) => setFilterAgent(e.target.value)}
-          className="w-full px-2 py-1.5 rounded border text-xs chip-btn"
-          style={{
-            background: "var(--panel-bg)",
-            borderColor: "var(--chip-border)",
-            color: "var(--foreground)",
-          }}
-        >
-          <option value="all">ALL AGENTS</option>
-          {agents.map((agent) => (
-            <option key={agent.id} value={agent.id}>
-              {agent.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* Filter - Only show for non-prompts tabs */}
+      {activeTab !== "prompts" && (
+        <div className="mb-3">
+          <label
+            className="text-xs mb-1 block tracking-wider"
+            style={{ color: "var(--muted-text)" }}
+          >
+            FILTER:
+          </label>
+          <select
+            value={filterAgent}
+            onChange={(e) => setFilterAgent(e.target.value)}
+            className="w-full px-2 py-1.5 rounded border text-xs chip-btn"
+            style={{
+              background: "var(--panel-bg)",
+              borderColor: "var(--chip-border)",
+              color: "var(--foreground)",
+            }}
+          >
+            <option value="all">ALL AGENTS</option>
+            {agents.map((agent) => (
+              <option key={agent.id} value={agent.id}>
+                {agent.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Agent Selector - Only for prompts tab */}
+      {activeTab === "prompts" && (
+        <div className="mb-3">
+          <label
+            className="text-xs mb-1 block tracking-wider"
+            style={{ color: "var(--muted-text)" }}
+          >
+            SELECT AGENT:
+          </label>
+          <select
+            value={filterAgent}
+            onChange={(e) => setFilterAgent(e.target.value)}
+            className="w-full px-2 py-1.5 rounded border text-xs chip-btn"
+            style={{
+              background: "var(--panel-bg)",
+              borderColor: "var(--chip-border)",
+              color: "var(--foreground)",
+            }}
+          >
+            {agents.filter(a => a.is_running).map((agent) => (
+              <option key={agent.id} value={agent.id}>
+                {agent.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto">
@@ -85,8 +116,10 @@ export function RightSideTabs({ agents }: RightSideTabsProps) {
               <PositionsContent agents={agents} filterAgent={filterAgent} />
             ) : activeTab === "trades" ? (
               <TradesContent agents={agents} filterAgent={filterAgent} />
-            ) : (
+            ) : activeTab === "decisions" ? (
               <DecisionsContent agents={agents} filterAgent={filterAgent} />
+            ) : (
+              <PromptsContent agents={agents} filterAgent={filterAgent} />
             )}
           </div>
     </div>
@@ -625,6 +658,32 @@ function DecisionsContent({
       })}
     </div>
   );
+}
+
+function PromptsContent({
+  agents,
+  filterAgent,
+}: {
+  agents: Agent[];
+  filterAgent: string;
+}) {
+  // Get the selected agent or first running agent
+  const selectedAgentId = filterAgent !== "all" 
+    ? filterAgent 
+    : agents.find(a => a.is_running)?.id;
+
+  if (!selectedAgentId) {
+    return (
+      <div className="flex items-center justify-center h-full" style={{ color: "var(--muted-text)" }}>
+        <div className="text-xs text-center">
+          <div className="mb-2">No running agents</div>
+          <div className="text-[10px]">Start an agent to configure prompts</div>
+        </div>
+      </div>
+    );
+  }
+
+  return <PromptEditor agentId={selectedAgentId} />;
 }
 
 

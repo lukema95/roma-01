@@ -293,12 +293,13 @@ class TradingAgent:
         return market_data
 
     def _build_system_prompt(self) -> str:
-        """Build system prompt with trading rules."""
+        """Build system prompt with trading rules and optional custom prompts."""
         risk = self.config["strategy"]["risk_management"]
         
-        prompt = f"""You are a professional cryptocurrency futures trading AI.
+        # Base system prompt (core rules only)
+        base_prompt = f"""You are a professional cryptocurrency futures trading AI.
 
-**RULES:**
+**CORE RULES:**
 1. Max positions: {risk['max_positions']}
 2. Max leverage: {risk['max_leverage']}x
 3. Single position limit: {risk['max_position_size_pct']}% of account
@@ -322,7 +323,49 @@ class TradingAgent:
 - If available balance < $5: Focus on SOLUSDT, BNBUSDT, DOGEUSDT, XRPUSDT (cheaper)
 - Choose coins you can ACTUALLY afford at minimum order size
 - Better to skip than request impossible trades
-
+"""
+        
+        # Add custom prompts if enabled
+        custom_prompts = self.config["strategy"].get("custom_prompts", {})
+        
+        if custom_prompts.get("enabled", False):
+            custom_sections = []
+            
+            if custom_prompts.get("trading_philosophy"):
+                custom_sections.append(f"""
+**YOUR TRADING PHILOSOPHY:**
+{custom_prompts['trading_philosophy']}
+""")
+            
+            if custom_prompts.get("entry_preferences"):
+                custom_sections.append(f"""
+**YOUR ENTRY PREFERENCES:**
+{custom_prompts['entry_preferences']}
+""")
+            
+            if custom_prompts.get("position_management"):
+                custom_sections.append(f"""
+**YOUR POSITION MANAGEMENT:**
+{custom_prompts['position_management']}
+""")
+            
+            if custom_prompts.get("market_preferences"):
+                custom_sections.append(f"""
+**YOUR MARKET PREFERENCES:**
+{custom_prompts['market_preferences']}
+""")
+            
+            if custom_prompts.get("additional_rules"):
+                custom_sections.append(f"""
+**YOUR ADDITIONAL RULES:**
+{custom_prompts['additional_rules']}
+""")
+            
+            if custom_sections:
+                base_prompt += "\n" + "\n".join(custom_sections)
+        
+        # Output format
+        base_prompt += """
 **OUTPUT FORMAT:**
 First, provide your chain of thought analysis.
 Then, output a JSON array of decisions:
@@ -346,7 +389,7 @@ Then, output a JSON array of decisions:
 - 0.3-0.5: Low confidence, exploratory or defensive action
 - Below 0.3: Very uncertain, consider "wait" instead
 """
-        return prompt
+        return base_prompt
 
     def _build_market_context(
         self, account: Dict, positions: List[Dict], market_data: Dict, performance: Dict
