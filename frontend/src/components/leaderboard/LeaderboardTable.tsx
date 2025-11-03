@@ -6,6 +6,8 @@ import { api } from "@/lib/api";
 import { getModelName, getModelColor } from "@/lib/model/meta";
 import { fmtUSD } from "@/lib/utils/formatters";
 import Link from "next/link";
+import { useLanguage } from "@/store/useLanguage";
+import { getTranslation } from "@/lib/i18n";
 
 type SortKey = 
   | "equity" 
@@ -246,6 +248,9 @@ export default function LeaderboardTable({
   mode?: "overall" | "advanced";
   agents: any[];
 }) {
+  const language = useLanguage((s) => s.language);
+  const t = getTranslation(language).leaderboard;
+  
   const [sortKey, setSortKey] = useState<SortKey>("equity");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -274,10 +279,10 @@ export default function LeaderboardTable({
         <table className="w-full text-left text-[10px] terminal-text">
           <thead style={{ color: "var(--muted-text)" }}>
             <tr className="border-b" style={{ borderColor: "var(--panel-border)" }}>
-              <Th label="RANK" />
-              <Th label="MODEL" />
+              <Th label={t.rank} />
+              <Th label={t.model} />
               <ThSort
-                label="ACCT VALUE ↓"
+                label={t.acctValue}
                 active={sortKey === "equity"}
                 dir={sortDir}
                 onClick={() => toggleSort("equity")}
@@ -285,25 +290,25 @@ export default function LeaderboardTable({
               {mode === "advanced" ? (
                 <>
                   <ThSort
-                    label="AVG TRADE SIZE"
+                    label={t.avgTradeSize}
                     active={sortKey === "avg_trade_size"}
                     dir={sortDir}
                     onClick={() => toggleSort("avg_trade_size")}
                   />
                   <ThSort
-                    label="MEDIAN TRADE SIZE"
+                    label={t.medianTradeSize}
                     active={sortKey === "median_trade_size"}
                     dir={sortDir}
                     onClick={() => toggleSort("median_trade_size")}
                   />
                   <ThSort
-                    label="AVG HOLD"
+                    label={t.avgHold}
                     active={sortKey === "avg_hold"}
                     dir={sortDir}
                     onClick={() => toggleSort("avg_hold")}
                   />
                   <ThSort
-                    label="MEDIAN HOLD"
+                    label={t.medianHold}
                     active={sortKey === "median_hold"}
                     dir={sortDir}
                     onClick={() => toggleSort("median_hold")}
@@ -315,31 +320,31 @@ export default function LeaderboardTable({
                     onClick={() => toggleSort("pct_long")}
                   />
                   <ThSort
-                    label="EXPECTANCY"
+                    label={t.expectancy}
                     active={sortKey === "expectancy"}
                     dir={sortDir}
                     onClick={() => toggleSort("expectancy")}
                   />
                   <ThSort
-                    label="MEDIAN LEVERAGE"
+                    label={t.medianLeverage}
                     active={sortKey === "median_leverage"}
                     dir={sortDir}
                     onClick={() => toggleSort("median_leverage")}
                   />
                   <ThSort
-                    label="AVG LEVERAGE"
+                    label={t.avgLeverage}
                     active={sortKey === "avg_leverage"}
                     dir={sortDir}
                     onClick={() => toggleSort("avg_leverage")}
                   />
                   <ThSort
-                    label="AVG CONFIDENCE"
+                    label={t.avgConfidence}
                     active={sortKey === "avg_confidence"}
                     dir={sortDir}
                     onClick={() => toggleSort("avg_confidence")}
                   />
                   <ThSort
-                    label="MEDIAN CONFIDENCE"
+                    label={t.medianConfidence}
                     active={sortKey === "median_confidence"}
                     dir={sortDir}
                     onClick={() => toggleSort("median_confidence")}
@@ -348,44 +353,44 @@ export default function LeaderboardTable({
               ) : (
                 <>
                   <ThSort
-                    label="RETURN %"
+                    label={t.returnPercent}
                     active={sortKey === "return_pct"}
                     dir={sortDir}
                     onClick={() => toggleSort("return_pct")}
                   />
                   <ThSort
-                    label="TOTAL P&L"
+                    label={t.totalPnl}
                     active={sortKey === "total_pnl"}
                     dir={sortDir}
                     onClick={() => toggleSort("total_pnl")}
                   />
-                  <Th label="FEES" />
+                  <Th label={t.fees} />
                   <ThSort
-                    label="WIN RATE"
+                    label={t.winRate}
                     active={sortKey === "win_rate"}
                     dir={sortDir}
                     onClick={() => toggleSort("win_rate")}
                   />
                   <ThSort
-                    label="BIGGEST WIN"
+                    label={t.biggestWin}
                     active={sortKey === "biggest_win"}
                     dir={sortDir}
                     onClick={() => toggleSort("biggest_win")}
                   />
                   <ThSort
-                    label="BIGGEST LOSS"
+                    label={t.biggestLoss}
                     active={sortKey === "biggest_loss"}
                     dir={sortDir}
                     onClick={() => toggleSort("biggest_loss")}
                   />
                   <ThSort
-                    label="SHARPE"
+                    label={t.sharpe}
                     active={sortKey === "sharpe"}
                     dir={sortDir}
                     onClick={() => toggleSort("sharpe")}
                   />
                   <ThSort
-                    label="TRADES"
+                    label={t.trades}
                     active={sortKey === "trades"}
                     dir={sortDir}
                     onClick={() => toggleSort("trades")}
@@ -425,7 +430,7 @@ export default function LeaderboardTable({
           color: "var(--muted-text)" 
         }}
       >
-        <strong>Note:</strong> All statistics (except <strong>Account Value</strong> and <strong>P&L</strong>) reflect <strong>completed trades only</strong>. Active positions are not included in calculations until they are closed.
+        <strong>{t.note}</strong> {t.completedTradesNote}
       </div>
     </div>
   );

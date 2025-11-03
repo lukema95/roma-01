@@ -7,8 +7,13 @@ import { getModelName, getModelColor, getAllModels } from "@/lib/model/meta";
 import { fmtUSD } from "@/lib/utils/formatters";
 import { getCoinIcon } from "@/lib/utils/coinIcons";
 import LeaderboardTable from "./LeaderboardTable";
+import { useLanguage } from "@/store/useLanguage";
+import { getTranslation } from "@/lib/i18n";
 
 export default function LeaderboardOverview() {
+  const language = useLanguage((s) => s.language);
+  const t = getTranslation(language).leaderboard;
+  
   const [tab, setTab] = useState<"overall" | "advanced">("overall");
   
   // Fetch running agents from API
@@ -110,10 +115,10 @@ export default function LeaderboardOverview() {
       {/* Tab Controls */}
       <div className="flex items-center gap-3">
         <TabButton active={tab === "overall"} onClick={() => setTab("overall")}>
-          OVERALL STATS
+          {t.overallStats}
         </TabButton>
         <TabButton active={tab === "advanced"} onClick={() => setTab("advanced")}>
-          ADVANCED ANALYTICS
+          {t.advancedAnalytics}
         </TabButton>
       </div>
 
@@ -246,6 +251,9 @@ function WinnerCard({ agent, symbols }: { agent: any; symbols: string[] }) {
 }
 
 function ModelBarsChart({ agents }: { agents: any[] }) {
+  const language = useLanguage((s) => s.language);
+  const t = getTranslation(language).leaderboard;
+  
   const FULL = 120;
   const SCALE = 15000; // Max scale for chart
 
@@ -297,9 +305,9 @@ function ModelBarsChart({ agents }: { agents: any[] }) {
         borderColor: "var(--panel-border)",
       }}
     >
-      <div className="text-xs uppercase tracking-wider mb-4" style={{ color: "var(--muted-text)" }}>
-        ACCOUNT VALUE
-      </div>
+        <div className="text-xs uppercase tracking-wider mb-4" style={{ color: "var(--muted-text)" }}>
+          {t.accountValue}
+        </div>
       <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">
         {agentsWithAccounts.map(({ agent, equity }) => {
           const color = getModelColor(agent.id);

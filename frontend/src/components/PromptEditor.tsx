@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useLanguage } from "@/store/useLanguage";
+import { getTranslation } from "@/lib/i18n";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -14,6 +16,9 @@ interface CustomPrompts {
 }
 
 export default function PromptEditor({ agentId }: { agentId: string }) {
+  const language = useLanguage((s) => s.language);
+  const t = getTranslation(language).prompts;
+  
   const [prompts, setPrompts] = useState<CustomPrompts>({
     enabled: false,
     trading_philosophy: "",
@@ -79,7 +84,7 @@ export default function PromptEditor({ agentId }: { agentId: string }) {
   };
 
   const clearPrompts = async () => {
-    if (!confirm("Are you sure you want to clear all custom prompts?")) {
+    if (!confirm(t.confirmClear)) {
       return;
     }
 
@@ -154,7 +159,7 @@ export default function PromptEditor({ agentId }: { agentId: string }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full" style={{ color: "var(--muted-text)" }}>
-        <div className="text-xs">Loading prompts...</div>
+        <div className="text-xs">{t.loadingPrompts}</div>
       </div>
     );
   }
@@ -166,10 +171,10 @@ export default function PromptEditor({ agentId }: { agentId: string }) {
         <div className="flex items-center justify-between">
           <div>
             <div className="font-semibold text-xs uppercase tracking-wider" style={{ color: "var(--foreground)" }}>
-              CUSTOM PROMPTS
+              {t.title}
             </div>
             <div className="text-[10px] mt-0.5" style={{ color: "var(--muted-text)" }}>
-              Customize AI trading strategy
+              {t.subtitle}
             </div>
           </div>
           
@@ -181,7 +186,7 @@ export default function PromptEditor({ agentId }: { agentId: string }) {
               onChange={(e) => setPrompts({...prompts, enabled: e.target.checked})}
               className="w-3.5 h-3.5"
             />
-            <span className="text-[10px]" style={{ color: "var(--foreground)" }}>Enable</span>
+            <span className="text-[10px]" style={{ color: "var(--foreground)" }}>{t.enable}</span>
           </label>
         </div>
 
@@ -199,7 +204,7 @@ export default function PromptEditor({ agentId }: { agentId: string }) {
               cursor: loadingPreview ? "not-allowed" : "pointer"
             }}
           >
-            {loadingPreview ? "Loading..." : showPreview ? "Hide Preview" : "View Full Prompt"}
+            {loadingPreview ? t.loading : showPreview ? t.hidePreview : t.viewFullPrompt}
           </button>
           <button
             onClick={clearPrompts}
@@ -213,7 +218,7 @@ export default function PromptEditor({ agentId }: { agentId: string }) {
               cursor: saving ? "not-allowed" : "pointer"
             }}
           >
-            {saving ? "Clearing..." : "Clear All"}
+            {saving ? t.clearing : t.clearAll}
           </button>
         </div>
       </div>
@@ -242,12 +247,12 @@ export default function PromptEditor({ agentId }: { agentId: string }) {
         >
           <div className="flex items-center justify-between mb-2">
             <div className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--foreground)" }}>
-              Full System Prompt Preview
+              {t.fullSystemPromptPreview}
             </div>
             <button
               onClick={() => {
                 navigator.clipboard.writeText(fullPrompt);
-                alert("Copied to clipboard!");
+                alert(t.copiedToClipboard);
               }}
               disabled={!fullPrompt}
               className="text-[10px] px-2 py-1 rounded hover:opacity-70"
@@ -258,14 +263,14 @@ export default function PromptEditor({ agentId }: { agentId: string }) {
                 cursor: fullPrompt ? "pointer" : "not-allowed"
               }}
             >
-              Copy
+              {t.copy}
             </button>
           </div>
           <pre 
             className="text-[10px] leading-relaxed whitespace-pre-wrap font-mono"
             style={{ color: "var(--muted-text)" }}
           >
-            {fullPrompt || "Loading preview..."}
+            {fullPrompt || t.loading}
           </pre>
         </div>
       )}
@@ -273,42 +278,42 @@ export default function PromptEditor({ agentId }: { agentId: string }) {
       {/* Prompt Fields */}
       <div className="space-y-3">
         <PromptField
-          label="Trading Philosophy"
+          label={t.tradingPhilosophy}
           value={prompts.trading_philosophy}
           onChange={(value) => setPrompts({...prompts, trading_philosophy: value})}
-          placeholder="例如：核心目标是最大化夏普比率，质量优于数量，只在高确信度时交易"
+          placeholder={t.philosophyPlaceholder}
           disabled={!prompts.enabled}
         />
 
         <PromptField
-          label="Entry Preferences"
+          label={t.entryPreferences}
           value={prompts.entry_preferences}
           onChange={(value) => setPrompts({...prompts, entry_preferences: value})}
-          placeholder="例如：多维度交叉验证（价格+量+指标），信心度≥75才开仓"
+          placeholder={t.entryPlaceholder}
           disabled={!prompts.enabled}
         />
 
         <PromptField
-          label="Position Management"
+          label={t.positionManagement}
           value={prompts.position_management}
           onChange={(value) => setPrompts({...prompts, position_management: value})}
-          placeholder="例如：盈利持仓至少30分钟，让利润奔跑，快速止损"
+          placeholder={t.positionPlaceholder}
           disabled={!prompts.enabled}
         />
 
         <PromptField
-          label="Market Preferences"
+          label={t.marketPreferences}
           value={prompts.market_preferences}
           onChange={(value) => setPrompts({...prompts, market_preferences: value})}
-          placeholder="例如：上涨做多，下跌做空，震荡观望，保持多空平衡"
+          placeholder={t.marketPlaceholder}
           disabled={!prompts.enabled}
         />
 
         <PromptField
-          label="Additional Rules"
+          label={t.additionalRules}
           value={prompts.additional_rules}
           onChange={(value) => setPrompts({...prompts, additional_rules: value})}
-          placeholder="例如：每小时最多2次交易，连亏2次休息30分钟，风险回报≥1:3"
+          placeholder={t.additionalPlaceholder}
           disabled={!prompts.enabled}
         />
       </div>
@@ -325,7 +330,7 @@ export default function PromptEditor({ agentId }: { agentId: string }) {
           cursor: saving || !prompts.enabled ? "not-allowed" : "pointer"
         }}
       >
-        {saving ? "Saving..." : saved ? "✓ Saved Successfully" : "Save Prompts"}
+        {saving ? t.saving : saved ? t.saved : t.savePrompts}
       </button>
 
       {saved && (
@@ -336,7 +341,7 @@ export default function PromptEditor({ agentId }: { agentId: string }) {
             color: "#22c55e"
           }}
         >
-          ✓ Prompts saved! Will take effect in next trading cycle.
+          {t.effectNextCycle}
         </div>
       )}
 
@@ -349,7 +354,7 @@ export default function PromptEditor({ agentId }: { agentId: string }) {
             border: "1px solid rgba(59, 130, 246, 0.2)"
           }}
         >
-          💡 <strong>Tip:</strong> Custom prompts are appended to core system rules. Changes take effect in the next trading cycle.
+          {t.tip}
         </div>
       )}
     </div>
@@ -369,6 +374,9 @@ function PromptField({
   placeholder: string;
   disabled: boolean;
 }) {
+  const language = useLanguage((s) => s.language);
+  const t = getTranslation(language).prompts;
+  
   return (
     <div className="space-y-1">
       <label 
@@ -393,7 +401,7 @@ function PromptField({
         }}
       />
       <div className="text-[9px]" style={{ color: "var(--muted-text)" }}>
-        {value.length} characters
+        {value.length} {t.characters}
       </div>
     </div>
   );

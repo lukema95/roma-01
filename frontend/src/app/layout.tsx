@@ -3,6 +3,7 @@ import { IBM_Plex_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import ThemeProvider from "@/components/theme/ThemeProvider";
+import LanguageProvider from "@/components/language/LanguageProvider";
 import Header from "@/components/layout/Header";
 
 const plexMono = IBM_Plex_Mono({
@@ -37,6 +38,7 @@ export default function RootLayout({
       </head>
       <body className={`${plexMono.variable} antialiased`}>
         <ThemeProvider />
+        <LanguageProvider />
         <div className="min-h-screen flex flex-col">
           <Header />
           <main className="flex-1">

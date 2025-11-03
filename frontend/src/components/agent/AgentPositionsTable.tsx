@@ -4,6 +4,8 @@ import useSWR from "swr";
 import { api } from "@/lib/api";
 import { fmtUSD } from "@/lib/utils/formatters";
 import { getCoinIcon } from "@/lib/utils/coinIcons";
+import { useLanguage } from "@/store/useLanguage";
+import { getTranslation } from "@/lib/i18n";
 
 function fmtTime(timestamp?: string | number) {
   if (!timestamp) return "—";
@@ -13,6 +15,9 @@ function fmtTime(timestamp?: string | number) {
 }
 
 export default function AgentPositionsTable({ agentId }: { agentId: string }) {
+  const language = useLanguage((s) => s.language);
+  const t = getTranslation(language).agent;
+  
   const { data: positions, isLoading } = useSWR(
     `/agent/${agentId}/positions`,
     () => api.getPositions(agentId),
@@ -31,10 +36,10 @@ export default function AgentPositionsTable({ agentId }: { agentId: string }) {
           className="text-sm font-semibold"
           style={{ color: "var(--foreground)" }}
         >
-          ACTIVE POSITIONS
+          {t.activePositions}
         </div>
         <div className="text-xs" style={{ color: "var(--muted-text)" }}>
-          Total Unrealized P&L:
+          {t.totalUnrealizedPnl}
           <span
             className="ml-1 font-bold"
             style={{ color: totalUnreal >= 0 ? "#22c55e" : "#ef4444" }}

@@ -4,6 +4,8 @@ import useSWR from "swr";
 import { api } from "@/lib/api";
 import { fmtUSD } from "@/lib/utils/formatters";
 import { getCoinIcon } from "@/lib/utils/coinIcons";
+import { useLanguage } from "@/store/useLanguage";
+import { getTranslation } from "@/lib/i18n";
 
 function holdTime(openTime?: string, closeTime?: string) {
   if (!openTime || !closeTime) return "—";
@@ -24,6 +26,9 @@ function fmtPrice(n?: number) {
 }
 
 export default function AgentTradesTable({ agentId }: { agentId: string }) {
+  const language = useLanguage((s) => s.language);
+  const t = getTranslation(language).agent;
+  
   const { data: trades, isLoading } = useSWR(
     `/agent/${agentId}/trades`,
     () => api.getTrades(agentId),
@@ -45,7 +50,7 @@ export default function AgentTradesTable({ agentId }: { agentId: string }) {
         className="mb-2 text-sm font-semibold"
         style={{ color: "var(--foreground)" }}
       >
-        LAST 25 TRADES
+        {t.last25Trades}
       </div>
 
       <div className="overflow-x-auto">
@@ -90,7 +95,7 @@ export default function AgentTradesTable({ agentId }: { agentId: string }) {
                   colSpan={10}
                   style={{ color: "var(--muted-text)" }}
                 >
-                  No completed trades yet
+                  {t.noTrades}
                 </td>
               </tr>
             ) : (

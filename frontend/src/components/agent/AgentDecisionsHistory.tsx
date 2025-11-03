@@ -3,6 +3,9 @@
 import { useMemo } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/api";
+import { getCoinIcon } from "@/lib/utils/coinIcons";
+import { useLanguage } from "@/store/useLanguage";
+import { getTranslation } from "@/lib/i18n";
 
 function formatTime(timestamp: string) {
   const d = new Date(timestamp);
@@ -17,6 +20,9 @@ function formatTime(timestamp: string) {
 }
 
 export default function AgentDecisionsHistory({ agentId }: { agentId: string }) {
+  const language = useLanguage((s) => s.language);
+  const t = getTranslation(language).agent;
+  
   const { data: decisionsData, isLoading } = useSWR(
     `/agent/${agentId}/decisions`,
     () => api.getDecisions(agentId, 10),
@@ -39,7 +45,7 @@ export default function AgentDecisionsHistory({ agentId }: { agentId: string }) 
         className="mb-2 text-sm font-semibold"
         style={{ color: "var(--foreground)" }}
       >
-        RECENT DECISIONS
+        {t.recentDecisions}
       </div>
 
       {isLoading ? (
@@ -48,7 +54,7 @@ export default function AgentDecisionsHistory({ agentId }: { agentId: string }) 
         </div>
       ) : !decisions || decisions.length === 0 ? (
         <div className="text-xs" style={{ color: "var(--muted-text)" }}>
-          No decisions yet
+          {t.noDecisions}
         </div>
       ) : (
         <div className="space-y-3">
@@ -189,7 +195,7 @@ export default function AgentDecisionsHistory({ agentId }: { agentId: string }) 
                       className="text-xs mt-2 leading-relaxed"
                       style={{ color: "var(--muted-text)" }}
                     >
-                      <span className="font-semibold">Reasoning:</span>{" "}
+                      <span className="font-semibold">{t.reasoning}</span>{" "}
                       {decision.decisions[0].reasoning}
                     </div>
                   )}

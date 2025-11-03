@@ -4,8 +4,12 @@ import { useMemo } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/api";
 import { fmtUSD, fmtPercent } from "@/lib/utils/formatters";
+import { useLanguage } from "@/store/useLanguage";
+import { getTranslation } from "@/lib/i18n";
 
 export default function AgentStatsSummary({ agentId }: { agentId: string }) {
+  const language = useLanguage((s) => s.language);
+  const t = getTranslation(language).agent;
   // Fetch account data
   const { data: account } = useSWR(`/agent/${agentId}/account`, () =>
     api.getAccount(agentId), { refreshInterval: 5000 }
@@ -81,7 +85,7 @@ export default function AgentStatsSummary({ agentId }: { agentId: string }) {
         }}
       >
         <div className="text-xs" style={{ color: "var(--muted-text)" }}>
-          Loading statistics...
+          {t.loadingStats}
         </div>
       </div>
     );
@@ -102,22 +106,22 @@ export default function AgentStatsSummary({ agentId }: { agentId: string }) {
           className="absolute right-3 top-2 text-[11px] whitespace-nowrap"
           style={{ color: "var(--muted-text)" }}
         >
-          Does not include funding costs and rebates
+          {t.doesNotIncludeFees}
         </div>
 
         <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-3">
           <Stat
-            label="Total Account Value"
+            label={t.totalAccountValue}
             value={fmtUSD(account.total_wallet_balance)}
           />
           <Stat
-            label="Total P&L"
+            label={t.totalPnl}
             value={fmtUSD(performance?.total_pnl)}
             tone="pnl"
             num={performance?.total_pnl}
           />
           <Stat
-            label="Net Realized"
+            label={t.netRealized}
             value={fmtUSD(performance?.total_pnl)}
             tone="pnl"
             num={performance?.total_pnl}
@@ -126,12 +130,12 @@ export default function AgentStatsSummary({ agentId }: { agentId: string }) {
 
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
           <Stat
-            label="Available Cash"
+            label={t.availableCash}
             value={fmtUSD(availableCash)}
           />
           <div></div>
           <Stat
-            label="Total Fees"
+            label={t.totalFees}
             value={fmtUSD(totalFees)}
           />
         </div>
@@ -147,21 +151,21 @@ export default function AgentStatsSummary({ agentId }: { agentId: string }) {
       >
         <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
           <Stat
-            label="Average Leverage"
+            label={t.avgLeverage}
             value={avgLeverage != null ? avgLeverage.toFixed(1) : "—"}
           />
           <Stat
-            label="Average Confidence"
+            label={t.avgConfidence}
             value={`${avgConfidence.toFixed(1)}%`}
           />
           <Stat
-            label="Biggest Win"
+            label={t.avgWin}
             value={fmtUSD(performance?.best_trade?.pnl)}
             tone="pnl"
             num={performance?.best_trade?.pnl}
           />
           <Stat
-            label="Biggest Loss"
+            label={t.avgLoss}
             value={fmtUSD(performance?.worst_trade?.pnl)}
             tone="pnl"
             num={performance?.worst_trade?.pnl}
@@ -174,11 +178,11 @@ export default function AgentStatsSummary({ agentId }: { agentId: string }) {
             className="text-xs mb-1"
             style={{ color: "var(--muted-text)" }}
           >
-            HOLD TIMES
+            {t.holdTimes}
           </div>
           <div className="grid grid-cols-1 gap-2 text-sm md:grid-cols-4">
             <div>
-              Long:
+              {t.long}:
               <span 
                 className="ml-2 tabular-nums font-semibold"
                 style={{ color: "#22c55e" }}
@@ -187,7 +191,7 @@ export default function AgentStatsSummary({ agentId }: { agentId: string }) {
               </span>
             </div>
             <div>
-              Short:
+              {t.short}:
               <span 
                 className="ml-2 tabular-nums font-semibold"
                 style={{ color: "#ef4444" }}
@@ -196,7 +200,7 @@ export default function AgentStatsSummary({ agentId }: { agentId: string }) {
               </span>
             </div>
             <div>
-              Flat:
+              {t.flat}:
               <span 
                 className="ml-2 tabular-nums font-semibold"
                 style={{ color: "var(--muted-text)" }}

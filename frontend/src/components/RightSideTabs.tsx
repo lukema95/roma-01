@@ -8,6 +8,8 @@ import { fmtUSD, fmtPercent } from "@/lib/utils/formatters";
 import { getModelColor, getModelName } from "@/lib/model/meta";
 import { getCoinIcon } from "@/lib/utils/coinIcons";
 import PromptEditor from "./PromptEditor";
+import { useLanguage } from "@/store/useLanguage";
+import { getTranslation } from "@/lib/i18n";
 
 interface RightSideTabsProps {
   agents: Agent[];
@@ -16,6 +18,9 @@ interface RightSideTabsProps {
 type TabType = "positions" | "trades" | "decisions" | "prompts";
 
 export function RightSideTabs({ agents }: RightSideTabsProps) {
+  const language = useLanguage((s) => s.language);
+  const t = getTranslation(language).tabs;
+  
   const [activeTab, setActiveTab] = useState<TabType>("positions");
   const [filterAgent, setFilterAgent] = useState<string>("all");
 
@@ -47,7 +52,7 @@ export function RightSideTabs({ agents }: RightSideTabsProps) {
               }
               onClick={() => setActiveTab(tab)}
             >
-              {tab}
+              {t[tab]}
             </button>
           ))}
         </div>
@@ -60,7 +65,7 @@ export function RightSideTabs({ agents }: RightSideTabsProps) {
             className="text-xs mb-1 block tracking-wider"
             style={{ color: "var(--muted-text)" }}
           >
-            FILTER:
+            {t.filter}
           </label>
           <select
             value={filterAgent}
@@ -72,7 +77,7 @@ export function RightSideTabs({ agents }: RightSideTabsProps) {
               color: "var(--foreground)",
             }}
           >
-            <option value="all">ALL AGENTS</option>
+            <option value="all">{t.allAgents}</option>
             {agents.map((agent) => (
               <option key={agent.id} value={agent.id}>
                 {agent.name}
@@ -89,7 +94,7 @@ export function RightSideTabs({ agents }: RightSideTabsProps) {
             className="text-xs mb-1 block tracking-wider"
             style={{ color: "var(--muted-text)" }}
           >
-            SELECT AGENT:
+            {t.selectAgent}
           </label>
           <select
             value={filterAgent}
@@ -667,6 +672,9 @@ function PromptsContent({
   agents: Agent[];
   filterAgent: string;
 }) {
+  const language = useLanguage((s) => s.language);
+  const t = getTranslation(language).prompts;
+  
   // Get the selected agent or first running agent
   const selectedAgentId = filterAgent !== "all" 
     ? filterAgent 
@@ -676,8 +684,8 @@ function PromptsContent({
     return (
       <div className="flex items-center justify-center h-full" style={{ color: "var(--muted-text)" }}>
         <div className="text-xs text-center">
-          <div className="mb-2">No running agents</div>
-          <div className="text-[10px]">Start an agent to configure prompts</div>
+          <div className="mb-2">{t.noRunningAgents}</div>
+          <div className="text-[10px]">{t.startAgentPrompt}</div>
         </div>
       </div>
     );

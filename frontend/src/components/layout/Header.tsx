@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useTheme } from "@/store/useTheme";
+import { useLanguage } from "@/store/useLanguage";
+import { getTranslation } from "@/lib/i18n";
 import { useState, useEffect, useRef } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/api";
@@ -10,6 +12,10 @@ import { getModelName, getModelColor } from "@/lib/model/meta";
 export function Header() {
   const theme = useTheme((s) => s.theme);
   const setTheme = useTheme((s) => s.setTheme);
+  const language = useLanguage((s) => s.language);
+  const setLanguage = useLanguage((s) => s.setLanguage);
+  const t = getTranslation(language);
+  
   const [agentsOpen, setAgentsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -69,10 +75,10 @@ export function Header() {
               aria-label="Primary"
             >
               <Link href="/" className="font-semibold hover:opacity-70 transition-opacity uppercase tracking-wider" style={{ color: "inherit" }}>
-                Live
+                {t.header.live}
               </Link>
               <Link href="/leaderboard" className="font-semibold hover:opacity-70 transition-opacity uppercase tracking-wider" style={{ color: "inherit" }}>
-                Leaderboard
+                {t.header.leaderboard}
               </Link>
           
           {/* Agents Dropdown */}
@@ -82,7 +88,7 @@ export function Header() {
               className="font-semibold hover:opacity-70 transition-opacity flex items-center gap-1 uppercase tracking-wider"
               style={{ color: "inherit" }}
             >
-              MODELS
+              {t.header.models}
               <svg 
                 className={`w-3 h-3 transition-transform ${agentsOpen ? "rotate-180" : ""}`}
                 fill="none" 
@@ -138,11 +144,11 @@ export function Header() {
                               className="text-[10px] px-1.5 py-0.5 rounded"
                               style={{ 
                                 background: "rgba(34, 197, 94, 0.15)",
-                                color: "#22c55e"
-                              }}
-                            >
-                              RUNNING
-                            </span>
+                              color: "#22c55e"
+                            }}
+                          >
+                            {t.header.running}
+                          </span>
                           )}
                         </div>
                       </Link>
@@ -155,7 +161,7 @@ export function Header() {
 
           {/* About Link */}
           <Link href="/about" className="font-semibold hover:opacity-70 transition-opacity uppercase tracking-wider" style={{ color: "inherit" }}>
-            About
+            {t.header.about}
           </Link>
         </nav>
 
@@ -187,28 +193,67 @@ export function Header() {
               </svg>
             </a>
 
+            {/* Language Toggle */}
+            <div className="flex items-center gap-1 text-[11px]">
+              <div
+                className="flex overflow-hidden rounded border"
+                style={{ borderColor: "var(--chip-border)" }}
+              >
+                <button
+                  title="English"
+                  className="px-2 py-1 chip-btn"
+                  style={
+                    language === "en"
+                      ? {
+                          background: "var(--btn-active-bg)",
+                          color: "var(--btn-active-fg)",
+                        }
+                      : { color: "var(--btn-inactive-fg)" }
+                  }
+                  onClick={() => setLanguage("en")}
+                >
+                  EN
+                </button>
+                <button
+                  title="中文"
+                  className="px-2 py-1 chip-btn"
+                  style={
+                    language === "zh"
+                      ? {
+                          background: "var(--btn-active-bg)",
+                          color: "var(--btn-active-fg)",
+                        }
+                      : { color: "var(--btn-inactive-fg)" }
+                  }
+                  onClick={() => setLanguage("zh")}
+                >
+                  中文
+                </button>
+              </div>
+            </div>
+
             {/* Theme Toggle */}
             <div className="hidden sm:flex items-center gap-1 text-[11px]">
               <div
                 className="flex overflow-hidden rounded border"
                 style={{ borderColor: "var(--chip-border)" }}
               >
-                {(["dark", "light", "system"] as const).map((t) => (
+                {(["dark", "light", "system"] as const).map((themeOption) => (
                   <button
-                    key={t}
-                    title={t}
+                    key={themeOption}
+                    title={themeOption}
                     className="px-2 py-1 capitalize chip-btn"
                     style={
-                      theme === t
+                      theme === themeOption
                         ? {
                             background: "var(--btn-active-bg)",
                             color: "var(--btn-active-fg)",
                           }
                         : { color: "var(--btn-inactive-fg)" }
                     }
-                    onClick={() => setTheme(t)}
+                    onClick={() => setTheme(themeOption)}
                   >
-                    {t}
+                    {themeOption}
                   </button>
                 ))}
               </div>
