@@ -21,6 +21,7 @@ This platform features a **NOF1-inspired frontend interface** ([nof1.ai](https:/
 - 🎨 **Model Showcase**: Display up to 6 different LLM models (DeepSeek, Qwen, Claude, Grok, Gemini, GPT) running simultaneously
 - 📈 **Live Trading Dashboard**: Monitor positions, completed trades, and AI decision-making processes
 - 📝 **Custom Prompts**: User-defined trading strategies
+- 💬 **AI Chat Assistant**: Interactive chat interface for getting trading advice, prompt suggestions, and platform guidance
 
 The interface provides a transparent view into how different AI models perform in live trading scenarios, similar to how NOF1 demonstrates model capabilities through competitive evaluation.
 
@@ -72,6 +73,7 @@ ROMA is a **meta-agent framework** that uses recursive hierarchical structures t
 - 📈 **Performance Tracking**: Comprehensive metrics and decision history
 - 🔐 **Production Ready**: Secure, tested, and battle-hardened
 - 📝 **Custom Prompts**: User-defined trading strategies
+- 💬 **AI Chat Assistant**: Get real-time help with trading strategies, prompt suggestions, and platform features
 
 ### Frontend Status
 - ✅ Agent overview and status monitoring
@@ -79,6 +81,7 @@ ROMA is a **meta-agent framework** that uses recursive hierarchical structures t
 - ✅ Custom prompts for each agent
 - ✅ Decision history and AI reasoning
 - ✅ Performance metrics and charts
+- ✅ AI Chat Assistant (new)
 - ⚠️ WebSocket real-time updates (implemented, integration pending)
 - 🔜 Advanced charting features (planned)
 - 🔜 Strategy configuration UI (planned)
@@ -405,6 +408,13 @@ Inspired by [NOF1.ai](https://nof1.ai/), this platform provides a competitive AI
 - **Decision History**: Complete AI reasoning logs showing how each trading decision was made
 - **Performance Metrics**: Win rate, profit factor, Sharpe ratio, max drawdown, and more
 
+### AI Chat Assistant
+- **Interactive Chat Interface**: Chat directly with AI assistant from the right-side tabs
+- **Trading Guidance**: Ask questions about trading strategies, prompt suggestions, and risk management
+- **Platform Help**: Get assistance understanding platform features and capabilities
+- **Real-time Responses**: Powered by the same LLM models used for trading decisions
+- **Bilingual Support**: Full i18n support for English and Chinese
+
 The interface design emphasizes transparency and comparison, allowing users to see how different AI models perform in identical market conditions.
 
 _Screenshots coming soon_
@@ -560,7 +570,7 @@ MIT License - see the [LICENSE](LICENSE) file for details.
 
 **Built with ❤️ using ROMA, DSPy, and AI**
 
-**Last Updated**: 2025-11-02  
-**Version**: 1.1.0  
+**Last Updated**: 2025-11-05  
+**Version**: 1.2.0  
 **Status**: Production Ready ✅
 
