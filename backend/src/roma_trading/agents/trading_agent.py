@@ -311,6 +311,63 @@ class TradingAgent:
 8. Take profit: {risk['take_profit_pct']}%
 9. Risk-reward ratio: Must be >= 1:3
 
+**CRITICAL - MARKET REGIME CLASSIFICATION (MUST DO FIRST):**
+Before making ANY trading decision, you MUST first classify the market regime:
+
+1. **UPTREND**: Price making higher highs and higher lows, price above EMA(20), RSI trending up
+   - Bias: LONG preferred, but still require confirmation
+   - Entry: Look for pullbacks to support, breakouts above resistance
+   
+2. **DOWNTREND**: Price making lower highs and lower lows, price below EMA(20), RSI trending down
+   - Bias: SHORT preferred (this is your default in downtrends!)
+   - Entry: Look for rallies to resistance, breakdowns below support
+   - DO NOT ignore short opportunities in downtrends
+   
+3. **RANGING/SIDEWAYS**: Price bouncing between support/resistance, mixed signals
+   - Bias: Reduce position size or stay flat
+   - Entry: Only trade clear breakouts with volume confirmation
+
+**ANTI-BIAS - LONG/SHORT BALANCE:**
+- NO LONG BIAS! You must be equally willing to trade SHORT as LONG
+- In downtrends, SHORT is the default strategy - actively look for short opportunities
+- If market is clearly downtrending, you should prefer short positions over long
+- Only open long positions in downtrends if you see very strong reversal signals (RSI oversold + bullish divergence + volume spike)
+- Remember: Shorting is just as valid as longing - profit from price going down
+
+**ENTRY REQUIREMENTS - MULTI-SIGNAL CONFIRMATION:**
+You must have alignment across multiple dimensions before opening ANY position:
+
+1. **Trend Direction**: 
+   - Long: Price above EMA(20), making higher highs
+   - Short: Price below EMA(20), making lower lows
+
+2. **Momentum**:
+   - Long: RSI(14) > 55 (bullish momentum)
+   - Short: RSI(14) < 45 (bearish momentum)
+
+3. **Confirmation**:
+   - MACD histogram should align with your direction
+   - For longs: MACD line above signal line, histogram positive
+   - For shorts: MACD line below signal line, histogram negative
+
+4. **Volume**:
+   - Look for volume spikes on breakouts/breakdowns
+   - Volume should confirm the move direction
+
+**REJECT TRADES IF:**
+- Signals conflict (e.g., RSI says long but MACD says short)
+- Market is clearly ranging (no clear trend)
+- Single-dimension signal (only RSI or only MACD)
+- Low volume (unconfirmed moves)
+
+**POSITION MANAGEMENT:**
+- Initial risk per trade: 0.5-1.0% of equity
+- Set stop loss FIRST, then position size
+- Move stop to breakeven only after position is profitable by 1R
+- Take partial profits at 2R, let runners go to 3R
+- NEVER average down on losing positions
+- Only pyramid/add to WINNING positions
+
 **IMPORTANT - Minimum Order Requirements:**
 - ALL coins have 0.001 minimum quantity
 - Minimum margin needed (@ 10x leverage):
@@ -324,6 +381,13 @@ class TradingAgent:
 - If available balance < $5: Focus on SOLUSDT, BNBUSDT, DOGEUSDT, XRPUSDT (cheaper)
 - Choose coins you can ACTUALLY afford at minimum order size
 - Better to skip than request impossible trades
+
+**TRADING FREQUENCY:**
+- Quality over quantity - be patient
+- Maximum 2 trades per hour
+- Maximum 8 trades per day
+- If you've made 3 consecutive losing trades, pause and reassess
+- Flat/empty portfolio is a valid state - don't force trades
 """
         
         # Add custom prompts if enabled
@@ -368,27 +432,50 @@ class TradingAgent:
         # Output format
         base_prompt += """
 **OUTPUT FORMAT:**
-First, provide your chain of thought analysis.
+First, provide your chain of thought analysis. MUST include:
+1. Market regime classification (uptrend/downtrend/ranging)
+2. Multi-signal confirmation check (trend, momentum, MACD, volume)
+3. Risk assessment
+4. Decision rationale
+
 Then, output a JSON array of decisions:
 
-[
-  {{"action": "open_long", "symbol": "BTCUSDT", "leverage": 5, "position_size_usd": 1000, "stop_loss": 94000, "take_profit": 98000, "confidence": 0.75, "reasoning": "..."}},
-  {{"action": "close_long", "symbol": "ETHUSDT", "confidence": 0.85, "reasoning": "Take profit"}}
-]
+Examples:
+LONG example:
+{{"action": "open_long", "symbol": "BTCUSDT", "leverage": 5, "position_size_usd": 1000, "stop_loss": 94000, "take_profit": 98000, "confidence": 0.75, "reasoning": "Uptrend confirmed, RSI 58, MACD bullish, volume spike on breakout"}}
+
+SHORT example (important - use this in downtrends!):
+{{"action": "open_short", "symbol": "ETHUSDT", "leverage": 5, "position_size_usd": 800, "stop_loss": 4100, "take_profit": 3700, "confidence": 0.80, "reasoning": "Downtrend confirmed, RSI 42, MACD bearish, breakdown below support with volume"}}
+
+Closing example:
+{{"action": "close_long", "symbol": "SOLUSDT", "confidence": 0.85, "reasoning": "Take profit target reached"}}
 
 **REQUIRED FIELDS:**
 - action: open_long, open_short, close_long, close_short, hold, wait
 - symbol: The trading pair (e.g., "BTCUSDT")
 - confidence: Your confidence level in this decision (0.0 to 1.0, where 1.0 = 100% confident)
-- reasoning: Brief explanation of why this decision
+- reasoning: Brief explanation including market regime and signal confirmation
 - For open positions: also include leverage, position_size_usd, stop_loss, take_profit
 
+**IMPORTANT - SHORT POSITIONS:**
+- In downtrends, you should actively consider open_short actions
+- Stop loss for shorts: price level ABOVE entry (if price goes up, you lose)
+- Take profit for shorts: price level BELOW entry (if price goes down, you profit)
+- Example: Entry at 4000, stop_loss at 4100 (max loss), take_profit at 3700 (profit target)
+
 **CONFIDENCE GUIDELINES:**
-- 0.9-1.0: Very strong conviction, clear technical/fundamental signals
-- 0.7-0.9: High confidence, good setup with manageable risk
-- 0.5-0.7: Moderate confidence, reasonable opportunity but uncertain
-- 0.3-0.5: Low confidence, exploratory or defensive action
-- Below 0.3: Very uncertain, consider "wait" instead
+- 0.9-1.0: Very strong conviction, clear technical/fundamental signals, all dimensions aligned
+- 0.7-0.9: High confidence, good setup with manageable risk, 3+ signals confirming
+- 0.5-0.7: Moderate confidence, reasonable opportunity but some uncertainty, 2 signals confirming
+- 0.3-0.5: Low confidence, exploratory or defensive action, weak signals
+- Below 0.3: Very uncertain, consider "wait" instead - better to miss than lose
+
+**DECISION PRIORITY:**
+1. First: Classify market regime
+2. Second: Check if signals align (trend + momentum + MACD + volume)
+3. Third: If downtrend, prefer SHORT over LONG
+4. Fourth: If signals conflict or market is ranging, choose "wait" or "hold"
+5. Last: Only open positions when confidence >= 0.7 and all signals align
 """
         return base_prompt
 
