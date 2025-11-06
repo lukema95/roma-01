@@ -46,16 +46,35 @@ const modelRegistry: Record<string, ModelMeta> = {
   },
 };
 
+// Map backend model IDs to frontend model IDs
+const modelIdMap: Record<string, string> = {
+  "deepseek-v3.1": "deepseek-chat-v3.1",
+  "deepseek-chat": "deepseek-chat-v3.1",
+  "qwen3-max": "qwen3-max",
+  "qwen-max": "qwen3-max",
+  "claude-sonnet-4.5": "claude-sonnet-4.5",
+  "grok-4": "grok-4",
+  "gemini-2.5-pro": "gemini-2.5-pro",
+  "gpt-5": "gpt-5",
+};
+
+function resolveModelId(id: string): string {
+  return modelIdMap[id] || id;
+}
+
 export function getModelColor(id: string): string {
-  return modelRegistry[id]?.color || "#a1a1aa";
+  const resolvedId = resolveModelId(id);
+  return modelRegistry[resolvedId]?.color || "#6366f1"; // Default to indigo instead of gray
 }
 
 export function getModelName(id: string): string {
-  return modelRegistry[id]?.name || id;
+  const resolvedId = resolveModelId(id);
+  return modelRegistry[resolvedId]?.name || id;
 }
 
 export function getModelIcon(id: string): string | undefined {
-  return modelRegistry[id]?.icon;
+  const resolvedId = resolveModelId(id);
+  return modelRegistry[resolvedId]?.icon;
 }
 
 export function resolveCanonicalId(id: string): string {

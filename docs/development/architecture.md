@@ -55,13 +55,16 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │                      Toolkit Layer                               │
 │  ┌──────────────────────────────────────────────────────────┐   │
-│  │               AsterToolkit (DEX Integration)              │   │
-│  │  • Trading (open/close positions)                        │   │
-│  │  • Market Data (prices, klines)                          │   │
-│  │  • Account Management                                    │   │
-│  │  • Position Management                                   │   │
-│  │  • EIP-191 Signing                                       │   │
+│  │            BaseDEXToolkit (Abstract Interface)            │   │
+│  │  • Unified interface for all DEX integrations            │   │
 │  └──────────────────────────────────────────────────────────┘   │
+│                            ↓                                     │
+│  ┌──────────────────────┬──────────────────────┐              │
+│  │   AsterToolkit       │  HyperliquidToolkit   │              │
+│  │  • EIP-191 Signing   │  • Native API        │              │
+│  │  • Aster Finance API  │  • Leverage Mgmt     │              │
+│  │  • Trading & Data     │  • Trading & Data    │              │
+│  └──────────────────────┴──────────────────────┘              │
 │                                                                  │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │           TechnicalAnalysisToolkit (TA-Lib)              │   │
@@ -74,8 +77,9 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │                   External Services                              │
 │  ┌──────────────────────────────────────────────────────────┐   │
-│  │            Aster Finance API v3                           │   │
-│  │  • REST API (fapi.asterdex.com)                          │   │
+│  │                  DEX Services                              │   │
+│  │  • Aster Finance API v3 (fapi.asterdex.com)              │   │
+│  │  • Hyperliquid API (api.hyperliquid.xyz)                 │   │
 │  │  • Perpetual Futures Trading                             │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │                                                                  │
@@ -102,6 +106,7 @@ LiteLLM                    # Unified LLM interface
 # Trading & Analysis
 Web3.py                    # Blockchain integration
 eth-account                # EIP-191 signing
+hyperliquid-python-sdk     # Hyperliquid DEX integration
 TA-Lib                     # Technical indicators
 httpx                      # Async HTTP client
 
@@ -138,14 +143,9 @@ roma-01/
 ├── backend/
 │   ├── config/
 │   │   ├── README.md                    # Configuration guide
-│   │   ├── trading_config.yaml          # Main config
-│   │   └── models/                      # Per-model configs
-│   │       ├── deepseek-chat-v3.1.yaml
-│   │       ├── qwen3-max.yaml
-│   │       ├── claude-sonnet-4.5.yaml
-│   │       ├── grok-4.yaml
-│   │       ├── gemini-2.5-pro.yaml
-│   │       └── gpt-5.yaml
+│   │   ├── README_CONFIG.md             # Account-centric config guide
+│   │   ├── QUICK_START.md               # Quick start guide
+│   │   └── trading_config.yaml          # Main config (account-centric)
 │   ├── src/
 │   │   └── roma_trading/
 │   │       ├── __init__.py

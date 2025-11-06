@@ -14,7 +14,7 @@ import {
 } from "recharts";
 import { format } from "date-fns";
 import { api } from "@/lib/api";
-import { getModelColor, getModelName, getModelIcon, getAllModels } from "@/lib/model/meta";
+import { getModelColor, getModelIcon } from "@/lib/model/meta";
 import { adjustLuminance } from "@/lib/utils/color";
 import type { Agent, EquityPoint } from "@/types";
 
@@ -31,6 +31,7 @@ function useAgentsEquityData(agentIds: string[]) {
   const agentsKey = agentIds.sort().join(',');
   
   // Fetch all equity data in a single SWR call
+  // Use agentsKey as the cache key to ensure cache is invalidated when agent list changes
   const { data: allEquityData } = useSWR(
     agentsKey ? `/agents/equity-batch?ids=${agentsKey}` : null,
     async () => {
@@ -38,9 +39,32 @@ function useAgentsEquityData(agentIds: string[]) {
       const results = await Promise.all(
         agentIds.map(async (id) => {
           try {
-            const data = await api.getEquityHistory(id);
-            return { agentId: id, data: data || [] };
+            const [equityData, accountData] = await Promise.all([
+              api.getEquityHistory(id).catch(() => []),
+              api.getAccount(id).catch(() => null),
+            ]);
+            
+            // If equity history is empty but account data exists, create initial point
+            if ((!equityData || equityData.length === 0) && accountData) {
+              const now = new Date().toISOString();
+              return {
+                agentId: id,
+                data: [{
+                  timestamp: now,
+                  cycle: 0,
+                  equity: accountData.total_wallet_balance || 0,
+                  pnl: accountData.total_unrealized_profit || 0,
+                }],
+              };
+            }
+            
+            return { agentId: id, data: equityData || [] };
           } catch (error) {
+            // Silently handle 404s (agent not found) - this is expected when agents are removed
+            if (error instanceof Error && error.message.includes('404')) {
+              console.debug(`Agent ${id} not found, skipping`);
+              return { agentId: id, data: [] };
+            }
             console.error(`Failed to fetch equity for ${id}:`, error);
             return { agentId: id, data: [] };
           }
@@ -48,7 +72,12 @@ function useAgentsEquityData(agentIds: string[]) {
       );
       return results;
     },
-    { refreshInterval: 30000 } // Refresh every 30 seconds
+    { 
+      refreshInterval: 30000, // Refresh every 30 seconds
+      revalidateOnFocus: false, // Don't revalidate on window focus to avoid stale agent requests
+      revalidateOnReconnect: true, // Revalidate when network reconnects
+      dedupingInterval: 5000, // Dedupe requests within 5 seconds
+    }
   );
 
   return allEquityData || [];
@@ -59,25 +88,23 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
   const [mode, setMode] = useState<Mode>("$");
   const [vw, setVw] = useState<number>(0);
   
-  // Get all defined models and merge with running agents
-  const allModels = useMemo(() => {
-    const allDefinedModels = getAllModels();
-    const runningMap = new Map(agents.map(a => [a.id, a]));
+  // Use running agents directly for legend, not predefined models
+  // Include model_id for getting correct color and icon
+  const runningAgents = useMemo(() => {
+    const result = agents.filter(a => a.is_running).map(a => ({
+      id: a.id,
+      name: a.name || a.id,
+      is_running: true,
+      model_id: a.model_id, // For getting model color and icon
+    }));
     
-    return allDefinedModels.map(model => {
-      const runningAgent = runningMap.get(model.id);
-      return {
-        id: model.id,
-        name: model.name,
-        is_running: runningAgent?.is_running || false,
-      };
-    });
+    return result;
   }, [agents]);
 
-  const [active, setActive] = useState<Set<string>>(new Set(allModels.filter(m => m.is_running).map(m => m.id)));
+  const [active, setActive] = useState<Set<string>>(new Set(runningAgents.map(a => a.id)));
 
   // Fetch equity history for running agents only
-  const runningAgentIds = useMemo(() => allModels.filter(m => m.is_running).map(m => m.id), [allModels]);
+  const runningAgentIds = useMemo(() => runningAgents.map(a => a.id), [runningAgents]);
   const equityDataQueries = useAgentsEquityData(runningAgentIds);
   
   // Track viewport width for responsive sizing
@@ -210,8 +237,11 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
     if (active.size && !active.has(id))
       return <g key={`empty-${id}-${index}`} />;
     
-    const icon = getModelIcon(id);
-    const color = getModelColor(id);
+    // Get model_id from agent to find correct icon and color
+    const agent = runningAgents.find(a => a.id === id);
+    const modelId = agent?.model_id || id; // Fallback to agent id if model_id not available
+    const icon = getModelIcon(modelId);
+    const color = getModelColor(modelId);
     const bg = color || "var(--chart-logo-bg)";
     const ring = typeof bg === "string" && bg.startsWith("#")
       ? adjustLuminance(bg, -0.15)
@@ -437,27 +467,35 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
                   stroke="var(--ref-line)"
                   strokeDasharray="4 4"
                 />
-                {runningAgentIds.map((id) => (
-                  <Line
-                    key={id}
-                    type="monotone"
-                    dataKey={id}
-                    stroke={getModelColor(id)}
-                    strokeWidth={1.8}
-                    dot={renderEndDot(id)}
-                    name={getModelName(id)}
-                    hide={active.size > 0 && !active.has(id)}
-                    className="series"
-                  />
-                ))}
+                {runningAgentIds.map((id) => {
+                  // Get model_id from agent to find correct color
+                  const agent = runningAgents.find(a => a.id === id);
+                  const modelId = agent?.model_id || id; // Fallback to agent id if model_id not available
+                  const color = getModelColor(modelId);
+                  const agentName = agent?.name || id;
+                  
+                  return (
+                    <Line
+                      key={id}
+                      type="monotone"
+                      dataKey={id}
+                      stroke={color}
+                      strokeWidth={2.5}
+                      dot={renderEndDot(id)}
+                      name={agentName}
+                      hide={active.size > 0 && !active.has(id)}
+                      className="series"
+                    />
+                  );
+                })}
               </LineChart>
             </ResponsiveContainer>
             )}
           </div>
         </div>
 
-        {/* Legend */}
-        {allModels.length > 0 && (
+        {/* Legend - Show only running agents */}
+        {runningAgents.length > 0 && (
           <div className="mt-3">
             {/* Small screens: horizontal scrollable legend */}
             <div className="block md:hidden">
@@ -465,29 +503,27 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
                 className="flex flex-nowrap gap-2 overflow-x-auto whitespace-nowrap pr-1"
                 style={{ WebkitOverflowScrolling: "touch" }}
               >
-                {allModels.map((model) => {
-                  const isRunning = model.is_running;
-                  const activeOn = isRunning && (active.size === 0 || active.has(model.id));
-                  const icon = getModelIcon(model.id);
-                  const displayColor = isRunning ? getModelColor(model.id) : "#6b7280";
+                {runningAgents.map((agent) => {
+                  const activeOn = active.size === 0 || active.has(agent.id);
+                  // Use model_id to get correct icon and color
+                  const modelId = agent.model_id || agent.id;
+                  const icon = getModelIcon(modelId);
+                  const displayColor = getModelColor(modelId);
                   
                   return (
                     <button
-                      key={model.id}
-                      disabled={!isRunning}
+                      key={agent.id}
                       className="inline-flex min-w-[110px] flex-shrink-0 flex-col items-center justify-center gap-1 rounded border px-2 py-2 text-[11px] chip-btn"
                       style={{
                         borderColor: "var(--chip-border)",
                         background: activeOn ? "var(--btn-active-bg)" : "transparent",
-                        color: isRunning ? (activeOn ? "var(--btn-active-fg)" : "var(--btn-inactive-fg)") : "#6b7280",
-                        opacity: isRunning ? 1 : 0.5,
-                        cursor: isRunning ? "pointer" : "not-allowed",
+                        color: activeOn ? "var(--btn-active-fg)" : "var(--btn-inactive-fg)",
+                        cursor: "pointer",
                       }}
                       onClick={() => {
-                        if (!isRunning) return;
                         setActive((prev) => {
-                          if (prev.size === 1 && prev.has(model.id)) return new Set(runningAgentIds);
-                          return new Set([model.id]);
+                          if (prev.size === 1 && prev.has(agent.id)) return new Set(runningAgentIds);
+                          return new Set([agent.id]);
                         });
                       }}
                     >
@@ -505,7 +541,6 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
                                 src={icon}
                                 alt=""
                                 className="h-full w-full object-contain"
-                                style={{ opacity: isRunning ? 1 : 0.6 }}
                               />
                             </span>
                           ) : (
@@ -514,21 +549,16 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
                               style={{ background: displayColor }}
                             />
                           )}
-                          {isRunning && (
-                            <span className="px-1 py-0.5 rounded text-[8px] font-semibold leading-none" style={{ background: "#10b981", color: "#fff" }}>
-                              LIVE
-                            </span>
-                          )}
+                          <span className="px-1 py-0.5 rounded text-[8px] font-semibold leading-none" style={{ background: "#10b981", color: "#fff" }}>
+                            LIVE
+                          </span>
                         </div>
                         <span className="text-[9px] text-center leading-tight max-w-full break-words px-1" style={{ wordBreak: "break-word" }}>
-                          {getModelName(model.id)}
+                          {agent.name}
                         </span>
                       </div>
                       <div className="font-semibold leading-tight tabular-nums text-[11px] mt-0.5">
-                        {isRunning 
-                          ? formatValue(lastValById[model.id])
-                          : "—"
-                        }
+                        {formatValue(lastValById[agent.id])}
                       </div>
                     </button>
                   );
@@ -537,30 +567,28 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
             </div>
 
             {/* Desktop: equal-width grid legend */}
-            <div className="hidden md:grid gap-2" style={{ gridTemplateColumns: `repeat(${allModels.length}, minmax(0, 1fr))` }}>
-              {allModels.map((model) => {
-                const isRunning = model.is_running;
-                const activeOn = isRunning && (active.size === 0 || active.has(model.id));
-                const icon = getModelIcon(model.id);
-                const displayColor = isRunning ? getModelColor(model.id) : "#6b7280";
+            <div className="hidden md:grid gap-2" style={{ gridTemplateColumns: `repeat(${runningAgents.length}, minmax(0, 1fr))` }}>
+              {runningAgents.map((agent) => {
+                const activeOn = active.size === 0 || active.has(agent.id);
+                // Use model_id to get correct icon and color
+                const modelId = agent.model_id || agent.id;
+                const icon = getModelIcon(modelId);
+                const displayColor = getModelColor(modelId);
                 
                 return (
                   <button
-                    key={model.id}
-                    disabled={!isRunning}
+                    key={agent.id}
                     className="w-full inline-flex flex-col items-center justify-center gap-1 rounded border px-2 py-2 text-[11px] chip-btn"
                     style={{
                       borderColor: "var(--chip-border)",
                       background: activeOn ? "var(--btn-active-bg)" : "transparent",
-                      color: isRunning ? (activeOn ? "var(--btn-active-fg)" : "var(--btn-inactive-fg)") : "#6b7280",
-                      opacity: isRunning ? 1 : 0.5,
-                      cursor: isRunning ? "pointer" : "not-allowed",
+                      color: activeOn ? "var(--btn-active-fg)" : "var(--btn-inactive-fg)",
+                      cursor: "pointer",
                     }}
                     onClick={() => {
-                      if (!isRunning) return;
                       setActive((prev) => {
-                        if (prev.size === 1 && prev.has(model.id)) return new Set(runningAgentIds);
-                        return new Set([model.id]);
+                        if (prev.size === 1 && prev.has(agent.id)) return new Set(runningAgentIds);
+                        return new Set([agent.id]);
                       });
                     }}
                   >
@@ -578,7 +606,6 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
                               src={icon}
                               alt=""
                               className="h-full w-full object-contain"
-                              style={{ opacity: isRunning ? 1 : 0.6 }}
                             />
                           </span>
                         ) : (
@@ -587,21 +614,16 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
                             style={{ background: displayColor }}
                           />
                         )}
-                        {isRunning && (
-                          <span className="px-1 py-0.5 rounded text-[8px] font-semibold leading-none" style={{ background: "#10b981", color: "#fff" }}>
-                            LIVE
-                          </span>
-                        )}
+                        <span className="px-1 py-0.5 rounded text-[8px] font-semibold leading-none" style={{ background: "#10b981", color: "#fff" }}>
+                          LIVE
+                        </span>
                       </div>
                       <span className="text-[9px] text-center leading-tight max-w-full break-words px-1" style={{ wordBreak: "break-word" }}>
-                        {getModelName(model.id)}
+                        {agent.name}
                       </span>
                     </div>
                     <div className="font-semibold leading-tight tabular-nums text-[11px] mt-0.5">
-                      {isRunning 
-                        ? formatValue(lastValById[model.id])
-                        : "—"
-                      }
+                      {formatValue(lastValById[agent.id])}
                     </div>
                   </button>
                 );

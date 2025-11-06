@@ -72,9 +72,10 @@ docs/
 - Common setup issues
 
 **[Configuration](user-guide/configuration.md)** (Important)
-- Complete configuration reference
+- Account-centric configuration architecture
+- Multi-DEX setup (Aster & Hyperliquid)
+- Model and account binding
 - Risk parameter tuning
-- Multi-model setup
 - Trading pair selection
 - Advanced settings
 
@@ -136,6 +137,8 @@ docs/
 
 **[Architecture](development/architecture.md)** (System design)
 - Overall architecture
+- Multi-DEX toolkit abstraction
+- Account-centric agent design
 - Component descriptions
 - Data flow diagrams
 - Technology stack
@@ -289,6 +292,6 @@ All documentation is licensed under the same MIT License as the project.
 
 ---
 
-**Documentation Version**: 1.1.0  
-**Last Updated**: November 2, 2025  
+**Documentation Version**: 1.3.0  
+**Last Updated**: November 6, 2025  
 **Status**: Current and Complete ✅

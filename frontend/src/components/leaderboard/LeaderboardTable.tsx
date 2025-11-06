@@ -87,7 +87,7 @@ function LeaderboardRow({
               className="w-2.5 h-2.5 rounded-full"
               style={{ background: "#6b7280" }}
             />
-            <span className="font-semibold">{getModelName(agent.id)}</span>
+            <span className="font-semibold">{agent.name || agent.id}</span>
           </div>
         </td>
         <td className="py-1.5 pr-2 tabular-nums" colSpan={mode === "advanced" ? 11 : 8} style={{ color: "var(--muted-text)" }}>
@@ -138,7 +138,7 @@ function LeaderboardRow({
             className="w-2.5 h-2.5 rounded-full"
             style={{ background: color }}
           />
-          <span className="font-semibold">{getModelName(agent.id)}</span>
+          <span className="font-semibold">{agent.name || agent.id}</span>
           {isRunning && (
             <span 
               className="text-[9px] px-1.5 py-0.5 rounded font-semibold"

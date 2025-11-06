@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/api";
 import type { Agent, Position } from "@/types";
@@ -23,6 +23,25 @@ export function RightSideTabs({ agents }: RightSideTabsProps) {
   
   const [activeTab, setActiveTab] = useState<TabType>("positions");
   const [filterAgent, setFilterAgent] = useState<string>("all");
+  const [filterDex, setFilterDex] = useState<string>("all");
+  const [filterAccount, setFilterAccount] = useState<string>("all");
+  
+  // Get unique DEX types and account IDs from agents
+  const dexTypes = useMemo(() => {
+    const types = new Set<string>();
+    agents.forEach(a => {
+      if (a.dex_type) types.add(a.dex_type);
+    });
+    return Array.from(types).sort();
+  }, [agents]);
+  
+  const accountIds = useMemo(() => {
+    const accounts = new Set<string>();
+    agents.forEach(a => {
+      if (a.account_id) accounts.add(a.account_id);
+    });
+    return Array.from(accounts).sort();
+  }, [agents]);
 
   return (
     <div
@@ -58,32 +77,93 @@ export function RightSideTabs({ agents }: RightSideTabsProps) {
         </div>
       </div>
 
-      {/* Filter - Only show for non-prompts and non-chat tabs */}
+      {/* Filters - Only show for non-prompts and non-chat tabs */}
       {activeTab !== "prompts" && activeTab !== "chat" && (
-        <div className="mb-3">
-          <label
-            className="text-xs mb-1 block tracking-wider"
-            style={{ color: "var(--muted-text)" }}
-          >
-            {t.filter}
-          </label>
-          <select
-            value={filterAgent}
-            onChange={(e) => setFilterAgent(e.target.value)}
-            className="w-full px-2 py-1.5 rounded border text-xs chip-btn"
-            style={{
-              background: "var(--panel-bg)",
-              borderColor: "var(--chip-border)",
-              color: "var(--foreground)",
-            }}
-          >
-            <option value="all">{t.allAgents}</option>
-            {agents.map((agent) => (
-              <option key={agent.id} value={agent.id}>
-                {agent.name}
-              </option>
-            ))}
-          </select>
+        <div className="mb-3 space-y-2">
+          {/* DEX Filter */}
+          {dexTypes.length > 1 && (
+            <div>
+              <label
+                className="text-xs mb-1 block tracking-wider"
+                style={{ color: "var(--muted-text)" }}
+              >
+                {t.filterDex}
+              </label>
+              <select
+                value={filterDex}
+                onChange={(e) => setFilterDex(e.target.value)}
+                className="w-full px-2 py-1.5 rounded border text-xs chip-btn"
+                style={{
+                  background: "var(--panel-bg)",
+                  borderColor: "var(--chip-border)",
+                  color: "var(--foreground)",
+                }}
+              >
+                <option value="all">{t.allDex}</option>
+                {dexTypes.map((dex) => (
+                  <option key={dex} value={dex}>
+                    {dex === "aster" ? t.aster : dex === "hyperliquid" ? t.hyperliquid : dex}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          
+          {/* Account Filter */}
+          {accountIds.length > 1 && (
+            <div>
+              <label
+                className="text-xs mb-1 block tracking-wider"
+                style={{ color: "var(--muted-text)" }}
+              >
+                {t.filterAccount}
+              </label>
+              <select
+                value={filterAccount}
+                onChange={(e) => setFilterAccount(e.target.value)}
+                className="w-full px-2 py-1.5 rounded border text-xs chip-btn"
+                style={{
+                  background: "var(--panel-bg)",
+                  borderColor: "var(--chip-border)",
+                  color: "var(--foreground)",
+                }}
+              >
+                <option value="all">{t.allAccounts}</option>
+                {accountIds.map((accountId) => (
+                  <option key={accountId} value={accountId}>
+                    {accountId}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          
+          {/* Agent Filter */}
+          <div>
+            <label
+              className="text-xs mb-1 block tracking-wider"
+              style={{ color: "var(--muted-text)" }}
+            >
+              {t.filter}
+            </label>
+            <select
+              value={filterAgent}
+              onChange={(e) => setFilterAgent(e.target.value)}
+              className="w-full px-2 py-1.5 rounded border text-xs chip-btn"
+              style={{
+                background: "var(--panel-bg)",
+                borderColor: "var(--chip-border)",
+                color: "var(--foreground)",
+              }}
+            >
+              <option value="all">{t.allAgents}</option>
+              {agents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       )}
 
@@ -118,11 +198,11 @@ export function RightSideTabs({ agents }: RightSideTabsProps) {
           {/* Content */}
           <div className="flex-1 overflow-y-auto">
             {activeTab === "positions" ? (
-              <PositionsContent agents={agents} filterAgent={filterAgent} />
+              <PositionsContent agents={agents} filterAgent={filterAgent} filterDex={filterDex} filterAccount={filterAccount} />
             ) : activeTab === "trades" ? (
-              <TradesContent agents={agents} filterAgent={filterAgent} />
+              <TradesContent agents={agents} filterAgent={filterAgent} filterDex={filterDex} filterAccount={filterAccount} />
             ) : activeTab === "decisions" ? (
-              <DecisionsContent agents={agents} filterAgent={filterAgent} />
+              <DecisionsContent agents={agents} filterAgent={filterAgent} filterDex={filterDex} filterAccount={filterAccount} />
             ) : activeTab === "prompts" ? (
               <PromptsContent agents={agents} filterAgent={filterAgent} />
             ) : (
@@ -136,14 +216,34 @@ export function RightSideTabs({ agents }: RightSideTabsProps) {
 function PositionsContent({
   agents,
   filterAgent,
+  filterDex,
+  filterAccount,
 }: {
   agents: Agent[];
   filterAgent: string;
+  filterDex: string;
+  filterAccount: string;
 }) {
   // Only show running agents
   const runningAgents = agents.filter(a => a.is_running);
-  const filteredAgents =
-    filterAgent === "all" ? runningAgents : runningAgents.filter((a) => a.id === filterAgent);
+  
+  // Apply filters
+  let filteredAgents = runningAgents;
+  
+  // Filter by DEX
+  if (filterDex !== "all") {
+    filteredAgents = filteredAgents.filter(a => a.dex_type === filterDex);
+  }
+  
+  // Filter by account
+  if (filterAccount !== "all") {
+    filteredAgents = filteredAgents.filter(a => a.account_id === filterAccount);
+  }
+  
+  // Filter by agent
+  if (filterAgent !== "all") {
+    filteredAgents = filteredAgents.filter((a) => a.id === filterAgent);
+  }
 
   // Fetch positions for filtered agents
   const positionsData = filteredAgents.map((agent) => {
@@ -305,14 +405,34 @@ function PositionsContent({
 function TradesContent({
   agents,
   filterAgent,
+  filterDex,
+  filterAccount,
 }: {
   agents: Agent[];
   filterAgent: string;
+  filterDex: string;
+  filterAccount: string;
 }) {
   // Only show running agents
   const runningAgents = agents.filter(a => a.is_running);
-  const filteredAgents =
-    filterAgent === "all" ? runningAgents : runningAgents.filter((a) => a.id === filterAgent);
+  
+  // Apply filters
+  let filteredAgents = runningAgents;
+  
+  // Filter by DEX
+  if (filterDex !== "all") {
+    filteredAgents = filteredAgents.filter(a => a.dex_type === filterDex);
+  }
+  
+  // Filter by account
+  if (filterAccount !== "all") {
+    filteredAgents = filteredAgents.filter(a => a.account_id === filterAccount);
+  }
+  
+  // Filter by agent
+  if (filterAgent !== "all") {
+    filteredAgents = filteredAgents.filter((a) => a.id === filterAgent);
+  }
 
   // Fetch trades for filtered agents
   const tradesDataQueries = filteredAgents.map((agent) => {
@@ -451,16 +571,36 @@ function TradesContent({
 function DecisionsContent({
   agents,
   filterAgent,
+  filterDex,
+  filterAccount,
 }: {
   agents: Agent[];
   filterAgent: string;
+  filterDex: string;
+  filterAccount: string;
 }) {
   const [expandedDecisions, setExpandedDecisions] = useState<Set<string>>(new Set());
 
   // Only show running agents
   const runningAgents = agents.filter(a => a.is_running);
-  const filteredAgents =
-    filterAgent === "all" ? runningAgents : runningAgents.filter((a) => a.id === filterAgent);
+  
+  // Apply filters
+  let filteredAgents = runningAgents;
+  
+  // Filter by DEX
+  if (filterDex !== "all") {
+    filteredAgents = filteredAgents.filter(a => a.dex_type === filterDex);
+  }
+  
+  // Filter by account
+  if (filterAccount !== "all") {
+    filteredAgents = filteredAgents.filter(a => a.account_id === filterAccount);
+  }
+  
+  // Filter by agent
+  if (filterAgent !== "all") {
+    filteredAgents = filteredAgents.filter((a) => a.id === filterAgent);
+  }
 
   // Fetch decisions for filtered agents
   const decisionsDataQueries = filteredAgents.map((agent) => {

@@ -23,14 +23,14 @@ api:
 # ============================================
 accounts:
   # Default Aster DEX account
-  # - id: "aster-acc-01"
-  #   name: "Aster Account 01"
-  #   dex_type: "aster"
-  #   user: ${ASTER_USER_01}
-  #   signer: ${ASTER_SIGNER_01}
-  #   private_key: ${ASTER_PRIVATE_KEY_01}
-  #   testnet: false
-  #   hedge_mode: false
+  - id: "aster-acc-01"
+    name: "Aster Account 01"
+    dex_type: "aster"
+    user: ${ASTER_USER_01}
+    signer: ${ASTER_SIGNER_01}
+    private_key: ${ASTER_PRIVATE_KEY_01}
+    testnet: false
+    hedge_mode: false
   
   # Add more accounts as needed:
   # - id: "aster-acc-02"
@@ -42,13 +42,13 @@ accounts:
   #   testnet: false
   #   hedge_mode: false
   #
-  - id: "hl-acc-01"
-    name: "Hyperliquid Account 01"
-    dex_type: "hyperliquid"
-    api_secret: ${HL_SECRET_KEY_01}
-    account_id: ${HL_ACCOUNT_ADDRESS_01} # Main wallet address
-    testnet: false
-    hedge_mode: false
+  # - id: "hl-acc-01"
+  #   name: "Hyperliquid Account 01"
+  #   dex_type: "hyperliquid"
+  #   api_secret: ${HL_SECRET_KEY_01}
+  #   account_id: ${HL_ACCOUNT_ADDRESS_01} # Main wallet address
+  #   testnet: false
+  #   hedge_mode: false
 
 # ============================================
 # Models: Define your LLM models
@@ -107,10 +107,10 @@ models:
 # ============================================
 agents:
   # Default agent: DeepSeek on Aster Account
-  - id: "deepseek-hl-01"
-    name: "DeepSeek on HL-01"
+  - id: "deepseek-aster-01"
+    name: "DeepSeek on Aster-01"
     enabled: true
-    account_id: "hl-acc-01"  # Reference to account above
+    account_id: "aster-acc-01"  # Reference to account above
     model_id: "deepseek-v3.1"   # Reference to model above
     strategy:
       initial_balance: 10000.0
@@ -133,7 +133,7 @@ agents:
         max_daily_loss_pct: 15
         stop_loss_pct: 3
         take_profit_pct: 10
-      trading_style: "aggressive"
+      trading_style: "balanced"
       custom_prompts:
         enabled: false
         trading_philosophy: ""

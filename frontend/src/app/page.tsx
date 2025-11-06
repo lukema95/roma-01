@@ -6,29 +6,29 @@ import { MultiAgentChart } from "@/components/MultiAgentChart";
 import { RightSideTabs } from "@/components/RightSideTabs";
 import useSWR from "swr";
 import { api } from "@/lib/api";
-import { getAllModels } from "@/lib/model/meta";
 
 export default function HomePage() {
   // Fetch running agents from API
   const { data: runningAgents, error } = useSWR("/agents", api.getAgents, {
     refreshInterval: 10000,
+    revalidateOnFocus: false, // Don't revalidate on window focus
+    revalidateOnReconnect: true, // Revalidate when network reconnects
   });
 
-  // Get all defined models and merge with running agents
+  // Use agents directly from API, no need to merge with predefined models
   const agents = useMemo(() => {
-    const allModels = getAllModels();
-    const runningMap = new Map((runningAgents || []).map(a => [a.id, a]));
-    
-    return allModels.map(model => {
-      const runningAgent = runningMap.get(model.id);
-      return {
-        id: model.id,
-        name: model.name,
-        is_running: runningAgent?.is_running || false,
-        cycle_count: runningAgent?.cycle_count || 0,
-        runtime_minutes: runningAgent?.runtime_minutes || 0,
-      };
-    });
+    return (runningAgents || []).map(a => ({
+      id: a.id,
+      name: a.name || a.id,
+      is_running: a.is_running || false,
+      cycle_count: a.cycle_count || 0,
+      runtime_minutes: a.runtime_minutes || 0,
+      // Multi-DEX fields from API
+      dex_type: a.dex_type,
+      account_id: a.account_id,
+      model_id: a.model_id,
+      model_provider: a.model_provider,
+    }));
   }, [runningAgents]);
 
   // Show PriceTicker even while loading

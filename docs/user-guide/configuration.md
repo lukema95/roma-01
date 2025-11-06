@@ -1,17 +1,37 @@
 # Configuration Guide
 
-Complete guide to configuring the ROMA Trading Platform.
+Complete guide to configuring the ROMA Trading Platform with account-centric architecture and multi-DEX support.
 
 ---
 
 ## 📋 Table of Contents
 
-1. [Environment Variables](#environment-variables)
-2. [Trading Configuration](#trading-configuration)
-3. [Agent Configuration](#agent-configuration)
-4. [Risk Management](#risk-management)
+1. [Account-Centric Architecture](#account-centric-architecture)
+2. [Environment Variables](#environment-variables)
+3. [Trading Configuration](#trading-configuration)
+4. [DEX Account Configuration](#dex-account-configuration)
 5. [Model Configuration](#model-configuration)
-6. [Advanced Settings](#advanced-settings)
+6. [Agent Configuration](#agent-configuration)
+7. [Risk Management](#risk-management)
+8. [Advanced Settings](#advanced-settings)
+
+---
+
+## 🏗️ Account-Centric Architecture
+
+ROMA-01 uses an **account-centric** configuration model that decouples DEX accounts from LLM models, allowing flexible combinations:
+
+- **Accounts**: Define DEX trading accounts (Aster, Hyperliquid, etc.)
+- **Models**: Define LLM configurations (DeepSeek, Qwen, Claude, etc.)  
+- **Agents**: Bind accounts with models to create trading agents
+
+This architecture enables:
+- ✅ Mix and match any account with any model
+- ✅ Run multiple agents on the same DEX with different models
+- ✅ Run multiple agents on different DEXs simultaneously
+- ✅ Each agent can have custom prompts and strategy
+
+See [backend/config/README_CONFIG.md](../../backend/config/README_CONFIG.md) for detailed configuration guide.
 
 ---
 
@@ -26,9 +46,13 @@ QWEN_API_KEY=your_qwen_api_key
 OPENROUTER_API_KEY=your_openrouter_api_key  # Optional
 
 # Aster DEX Configuration
-ASTER_USER=0xYourUserAddress
-ASTER_SIGNER=0xYourSignerAddress
-ASTER_PRIVATE_KEY=your_private_key
+ASTER_USER_01=0xYourUserAddress
+ASTER_SIGNER_01=0xYourSignerAddress
+ASTER_PRIVATE_KEY_01=your_private_key
+
+# Hyperliquid DEX Configuration (Optional)
+HL_SECRET_KEY_01=your_hyperliquid_secret_key
+HL_ACCOUNT_ADDRESS_01=0xYourHyperliquidAddress
 
 # Optional: Testnet
 # ASTER_TESTNET=true
@@ -47,6 +71,10 @@ ASTER_PRIVATE_KEY=your_private_key
 - **Signer Address**: Authorized signer address
 - **Private Key**: For signing transactions (keep secure!)
 
+#### 3. Hyperliquid DEX Credentials (Optional)
+- **API Secret**: Secret key for Hyperliquid API authentication
+- **Account Address**: Your Hyperliquid account address
+
 ⚠️ **Security**: Never commit `.env` to version control!
 
 ---
@@ -55,11 +83,13 @@ ASTER_PRIVATE_KEY=your_private_key
 
 ### Main Config (`backend/config/trading_config.yaml`)
 
+The configuration uses account-centric architecture with three main sections:
+
 ```yaml
 # System Settings
 system:
   scan_interval_minutes: 3        # How often agents make decisions
-  max_concurrent_agents: 5        # Maximum number of agents
+  max_concurrent_agents: 6        # Maximum number of agents
   log_level: "INFO"               # DEBUG, INFO, WARNING, ERROR
 
 # API Settings
@@ -67,22 +97,51 @@ api:
   host: "0.0.0.0"                 # API server host
   port: 8000                      # API server port
 
-# Active Agents
+# DEX Accounts
+accounts:
+  - id: "aster-acc-01"
+    dex_type: "aster"
+    user: ${ASTER_USER_01}
+    signer: ${ASTER_SIGNER_01}
+    private_key: ${ASTER_PRIVATE_KEY_01}
+    testnet: false
+    hedge_mode: false
+  
+  - id: "hl-acc-01"
+    dex_type: "hyperliquid"
+    api_secret: ${HL_SECRET_KEY_01}
+    account_id: ${HL_ACCOUNT_ADDRESS_01}
+    testnet: false
+
+# LLM Models
+models:
+  - id: "deepseek-v3.1"
+    provider: "deepseek"
+    api_key: ${DEEPSEEK_API_KEY}
+    model: "deepseek-chat"
+    temperature: 0.15
+    max_tokens: 4000
+  
+  - id: "qwen3-max"
+    provider: "qwen"
+    api_key: ${QWEN_API_KEY}
+    model: "qwen-max"
+    temperature: 0.15
+    max_tokens: 4000
+
+# Trading Agents (bind accounts with models)
 agents:
-  - id: "deepseek_aggressive"
-    name: "DeepSeek Aggressive"
-    enabled: true                  # Set to false to disable
-    config_file: "config/models/deepseek_aggressive.yaml"
+  - id: "deepseek-aster-01"
+    name: "DeepSeek on Aster-01"
+    enabled: true
+    account_id: "aster-acc-01"
+    model_id: "deepseek-v3.1"
   
-  - id: "deepseek_conservative"
-    name: "DeepSeek Conservative"
-    enabled: false                 # Disabled for single-agent mode
-    config_file: "config/models/deepseek_conservative.yaml"
-  
-  - id: "qwen_balanced"
-    name: "Qwen Balanced"
-    enabled: false                 # Disabled by default
-    config_file: "config/models/qwen_balanced.yaml"
+  - id: "qwen-hl-01"
+    name: "Qwen on Hyperliquid-01"
+    enabled: false
+    account_id: "hl-acc-01"
+    model_id: "qwen3-max"
 ```
 
 ### Configuration Options
@@ -95,62 +154,85 @@ agents:
 
 ---
 
-## 🤖 Agent Configuration
+## 🌐 DEX Account Configuration
 
-### Agent Config Template (`config/models/{agent_id}.yaml`)
+### Aster Account
 
 ```yaml
-# Agent Identity
-agent:
-  id: "deepseek_aggressive"
-  name: "DeepSeek Aggressive Trader"
-  description: "High-frequency trading with larger position sizes"
+accounts:
+  - id: "aster-acc-01"
+    dex_type: "aster"
+    user: ${ASTER_USER_01}          # Wallet address
+    signer: ${ASTER_SIGNER_01}      # Authorized signer
+    private_key: ${ASTER_PRIVATE_KEY_01}  # For EIP-191 signing
+    testnet: false
+    hedge_mode: false
+```
 
-# LLM Configuration
-llm:
-  provider: "deepseek"              # deepseek, qwen, openrouter
-  api_key: "${DEEPSEEK_API_KEY}"    # From .env
-  model: "deepseek-chat"            # Model name
-  temperature: 0.15                 # 0.0 (deterministic) to 1.0 (creative)
-  max_tokens: 4000                  # Max response length
+### Hyperliquid Account
 
-# Exchange Configuration
-exchange:
-  type: "aster"                     # Currently only aster supported
-  user: "${ASTER_USER}"
-  signer: "${ASTER_SIGNER}"
-  private_key: "${ASTER_PRIVATE_KEY}"
-  testnet: false                    # Set true for testnet
+```yaml
+accounts:
+  - id: "hl-acc-01"
+    dex_type: "hyperliquid"
+    api_secret: ${HL_SECRET_KEY_01}        # Secret key for API
+    account_id: ${HL_ACCOUNT_ADDRESS_01}   # Account address
+    testnet: false
+```
 
-# Strategy Configuration
-strategy:
-  initial_balance: 10000.0          # For display/calculations
-  scan_interval_minutes: 3          # Decision frequency
-  
-  # Resource Allocation (for multi-agent)
-  max_account_usage_pct: 100        # 100% for single agent, 60% for multi
-  
-  # Trading Pairs
-  default_coins:
-    - "BTCUSDT"
-    - "ETHUSDT"
-    - "SOLUSDT"
-    - "BNBUSDT"
-  
-  # Risk Management
-  risk_management:
-    max_positions: 3                # Max concurrent positions
-    max_leverage: 10                # Max leverage per position
-    max_position_size_pct: 30       # Single position max % of account
-    max_total_position_pct: 80      # Total positions max % of balance
-    max_single_trade_pct: 50        # Max % per trade (no positions)
-    max_single_trade_with_positions_pct: 30  # Max % (with positions)
-    max_daily_loss_pct: 15          # Daily loss limit
-    stop_loss_pct: 3                # Per-position stop loss
-    take_profit_pct: 10             # Per-position take profit
-  
-  # Trading Style
-  trading_style: "aggressive"       # aggressive, conservative, balanced
+## 🧠 Model Configuration
+
+### Model Config Template
+
+```yaml
+models:
+  - id: "deepseek-v3.1"
+    provider: "deepseek"
+    api_key: ${DEEPSEEK_API_KEY}
+    model: "deepseek-chat"
+    temperature: 0.15
+    max_tokens: 4000
+```
+
+## 🤖 Agent Configuration
+
+### Agent Config Template
+
+```yaml
+# Agent binds account and model
+agents:
+  - id: "deepseek-aster-01"
+    name: "DeepSeek on Aster-01"
+    enabled: true
+    account_id: "aster-acc-01"      # Reference to account above
+    model_id: "deepseek-v3.1"       # Reference to model above
+    
+    # Optional: Agent-specific strategy overrides
+    strategy:
+      initial_balance: 10000.0          # For display/calculations
+      scan_interval_minutes: 3          # Decision frequency
+      
+      # Trading Pairs
+      default_coins:
+        - "BTCUSDT"
+        - "ETHUSDT"
+        - "SOLUSDT"
+        - "BNBUSDT"
+      
+      # Risk Management
+      risk_management:
+        max_positions: 3                # Max concurrent positions
+        max_leverage: 10                # Max leverage per position
+        max_position_size_pct: 30       # Single position max % of account
+        max_total_position_pct: 80      # Total positions max % of balance
+        max_single_trade_pct: 50        # Max % per trade (no positions)
+        max_single_trade_with_positions_pct: 30  # Max % (with positions)
+        max_daily_loss_pct: 15          # Daily loss limit
+        stop_loss_pct: 3                # Per-position stop loss
+        take_profit_pct: 10             # Per-position take profit
+      
+      # Trading Style
+      trading_style: "aggressive"       # aggressive, conservative, balanced
 ```
 
 ---
