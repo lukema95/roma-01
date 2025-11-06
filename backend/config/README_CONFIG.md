@@ -96,6 +96,7 @@ models:
     provider: "qwen"
     api_key: ${QWEN_API_KEY}
     model: "qwen-max"
+    location: "china"  # "china" for China region, "international" or other values for international region
 
 agents:
   - id: "deepseek-aster-01"
@@ -218,11 +219,21 @@ models:
     model: "deepseek-chat"            # Required
     temperature: 0.15                 # Optional, default: 0.15
     max_tokens: 4000                  # Optional, default: 4000
+  
+  - id: "qwen3-max"
+    provider: "qwen"                  # Required
+    api_key: ${QWEN_API_KEY}          # Required
+    model: "qwen-max"                 # Required
+    location: "china"                 # Optional, default: "china"
+                                      #   - "china": Use https://dashscope.aliyuncs.com/compatible-mode/v1
+                                      #   - "international" or other: Use https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+    temperature: 0.15                 # Optional, default: 0.15
+    max_tokens: 4000                  # Optional, default: 4000
 ```
 
 Supported providers:
 - `deepseek`
-- `qwen`
+- `qwen` (supports `location` parameter for region selection)
 - `anthropic`
 - `openai`
 - `xai`
