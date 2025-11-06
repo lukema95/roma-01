@@ -18,6 +18,12 @@ from loguru import logger
 from roma_trading.toolkits import AsterToolkit, TechnicalAnalysisToolkit
 from roma_trading.core import DecisionLogger, PerformanceAnalyzer
 
+# Import HyperliquidToolkit if available
+try:
+    from roma_trading.toolkits.hyperliquid_toolkit import HyperliquidToolkit
+except ImportError:
+    HyperliquidToolkit = None
+
 
 class TradingDecision(dspy.Signature):
     """
@@ -64,13 +70,31 @@ class TradingAgent:
         self.config = config
         self.trading_lock = trading_lock or asyncio.Lock()  # Use shared or create own
         
-        # Initialize DEX toolkit
-        self.dex = AsterToolkit(
-            user=config["exchange"]["user"],
-            signer=config["exchange"]["signer"],
-            private_key=config["exchange"]["private_key"],
-            hedge_mode=config["exchange"].get("hedge_mode", False),
-        )
+        # Initialize DEX toolkit based on exchange.type
+        exchange_cfg = config.get("exchange", {})
+        dex_type = exchange_cfg.get("type", "aster").lower()
+        if dex_type == "hyperliquid":
+            if HyperliquidToolkit is None:
+                raise ImportError(
+                    "HyperliquidToolkit not available. "
+                    "Install hyperliquid-python-sdk: pip install hyperliquid-python-sdk"
+                )
+            self.dex = HyperliquidToolkit(
+                api_key=exchange_cfg.get("api_key", ""),
+                api_secret=exchange_cfg.get("api_secret", ""),
+                account_id=exchange_cfg.get("account_id"),
+                testnet=exchange_cfg.get("testnet", False),
+                hedge_mode=exchange_cfg.get("hedge_mode", False),
+            )
+            logger.info(f"TradingAgent {agent_id}: using Hyperliquid toolkit")
+        else:
+            self.dex = AsterToolkit(
+                user=exchange_cfg["user"],
+                signer=exchange_cfg["signer"],
+                private_key=exchange_cfg["private_key"],
+                hedge_mode=exchange_cfg.get("hedge_mode", False),
+            )
+            logger.info(f"TradingAgent {agent_id}: using Aster toolkit")
         
         # Initialize technical analysis
         self.ta = TechnicalAnalysisToolkit()
@@ -334,31 +358,38 @@ Before making ANY trading decision, you MUST first classify the market regime:
 - Only open long positions in downtrends if you see very strong reversal signals (RSI oversold + bullish divergence + volume spike)
 - Remember: Shorting is just as valid as longing - profit from price going down
 
-**ENTRY REQUIREMENTS - MULTI-SIGNAL CONFIRMATION:**
-You must have alignment across multiple dimensions before opening ANY position:
+**ENTRY REQUIREMENTS - SIGNAL CONFIRMATION:**
+You should have alignment across multiple dimensions before opening a position, but be flexible:
 
-1. **Trend Direction**: 
+1. **Trend Direction** (Primary): 
    - Long: Price above EMA(20), making higher highs
    - Short: Price below EMA(20), making lower lows
+   - This is the most important signal
 
-2. **Momentum**:
-   - Long: RSI(14) > 55 (bullish momentum)
-   - Short: RSI(14) < 45 (bearish momentum)
+2. **Momentum** (Secondary):
+   - Long: RSI(14) > 50 (moderate bullish momentum) or RSI > 55 (strong)
+   - Short: RSI(14) < 50 (moderate bearish momentum) or RSI < 45 (strong)
+   - RSI extremes (oversold/overbought) can also signal reversals
 
-3. **Confirmation**:
-   - MACD histogram should align with your direction
-   - For longs: MACD line above signal line, histogram positive
-   - For shorts: MACD line below signal line, histogram negative
+3. **MACD Confirmation** (Supporting):
+   - MACD histogram should align with your direction when possible
+   - For longs: MACD line above signal line preferred, but not required
+   - For shorts: MACD line below signal line preferred, but not required
+   - MACD divergence can signal reversals
 
-4. **Volume**:
-   - Look for volume spikes on breakouts/breakdowns
-   - Volume should confirm the move direction
+4. **Volume** (Supporting):
+   - Volume spikes on breakouts/breakdowns are ideal
+   - But don't reject trades solely due to lower volume
+
+**Minimum Entry Requirements:**
+- At least 2 out of 4 signals should align (trend + one other)
+- Strong trend with RSI confirmation is sufficient
+- MACD and volume are nice-to-have but not mandatory
 
 **REJECT TRADES IF:**
-- Signals conflict (e.g., RSI says long but MACD says short)
-- Market is clearly ranging (no clear trend)
-- Single-dimension signal (only RSI or only MACD)
-- Low volume (unconfirmed moves)
+- Strong signal conflicts (e.g., strong uptrend but RSI < 30 and MACD strongly bearish)
+- Market is clearly ranging AND no clear breakout signal
+- Single-dimension signal with no confirmation AND low confidence
 
 **POSITION MANAGEMENT:**
 - Initial risk per trade: 0.5-1.0% of equity
@@ -383,11 +414,12 @@ You must have alignment across multiple dimensions before opening ANY position:
 - Better to skip than request impossible trades
 
 **TRADING FREQUENCY:**
-- Quality over quantity - be patient
-- Maximum 2 trades per hour
-- Maximum 8 trades per day
-- If you've made 3 consecutive losing trades, pause and reassess
-- Flat/empty portfolio is a valid state - don't force trades
+- Balance quality and quantity - be proactive but not reckless
+- Maximum 3 trades per hour (increased from 2)
+- Maximum 12 trades per day (increased from 8)
+- If you've made 4 consecutive losing trades (increased from 3), pause and reassess
+- Flat/empty portfolio is acceptable, but actively look for opportunities
+- Don't be overly conservative - if you see a good setup, take it
 """
         
         # Add custom prompts if enabled
@@ -464,18 +496,28 @@ Closing example:
 - Example: Entry at 4000, stop_loss at 4100 (max loss), take_profit at 3700 (profit target)
 
 **CONFIDENCE GUIDELINES:**
-- 0.9-1.0: Very strong conviction, clear technical/fundamental signals, all dimensions aligned
-- 0.7-0.9: High confidence, good setup with manageable risk, 3+ signals confirming
-- 0.5-0.7: Moderate confidence, reasonable opportunity but some uncertainty, 2 signals confirming
-- 0.3-0.5: Low confidence, exploratory or defensive action, weak signals
-- Below 0.3: Very uncertain, consider "wait" instead - better to miss than lose
+- 0.9-1.0: Very strong conviction, clear technical signals, all dimensions aligned
+- 0.7-0.9: High confidence, good setup with manageable risk, 2-3 signals confirming
+- 0.5-0.7: Moderate confidence, reasonable opportunity, trend + one confirming signal
+- 0.3-0.5: Lower confidence, but acceptable if trend is clear and risk is controlled
+- Below 0.3: Very uncertain, consider "wait" instead
+
+**Note:** You can trade with 0.5-0.7 confidence if the trend is clear and risk/reward is favorable. Don't wait for perfect setups.
 
 **DECISION PRIORITY:**
 1. First: Classify market regime
-2. Second: Check if signals align (trend + momentum + MACD + volume)
-3. Third: If downtrend, prefer SHORT over LONG
-4. Fourth: If signals conflict or market is ranging, choose "wait" or "hold"
-5. Last: Only open positions when confidence >= 0.7 and all signals align
+2. Second: Check if trend is clear (this is the most important)
+3. Third: Look for at least one confirming signal (RSI, MACD, or volume)
+4. Fourth: Evaluate risk/reward ratio (aim for >= 1:3, but 1:2 is acceptable)
+5. Fifth: Check position limits and available balance
+6. Sixth: Make decision (open/close/hold)
+
+**Trading Attitude:**
+- Be proactive: If you see a reasonable opportunity with clear trend, take it
+- Don't wait for perfect alignment of all 4 signals
+- Trend + RSI confirmation is often sufficient for entry
+- Better to take a calculated risk than to miss opportunities
+- You can trade with 0.5-0.7 confidence if trend is clear - don't wait for 0.8+
 """
         return base_prompt
 
@@ -830,11 +872,19 @@ Closing example:
 
     def get_status(self) -> Dict:
         """Get agent status for API."""
+        exchange_cfg = self.config.get("exchange", {})
+        llm_cfg = self.config.get("llm", {})
+        
         return {
             "agent_id": self.agent_id,
             "name": self.config["agent"]["name"],
             "is_running": self.is_running,
             "cycle_count": self.cycle_count,
             "runtime_minutes": int((datetime.now() - self.start_time).total_seconds() / 60),
+            # Multi-DEX support fields
+            "dex_type": exchange_cfg.get("type", "aster"),
+            "account_id": exchange_cfg.get("account_id") or exchange_cfg.get("user"),
+            "model_id": llm_cfg.get("model"),
+            "model_provider": llm_cfg.get("provider"),
         }
 

@@ -8,6 +8,11 @@ export interface Agent {
   is_running: boolean;
   cycle_count: number;
   runtime_minutes: number;
+  // Multi-DEX support fields
+  dex_type?: "aster" | "hyperliquid";
+  account_id?: string;
+  model_id?: string;
+  model_provider?: string;
 }
 
 export interface AgentStatus {
@@ -16,6 +21,11 @@ export interface AgentStatus {
   is_running: boolean;
   cycle_count: number;
   runtime_minutes: number;
+  // Multi-DEX support fields
+  dex_type?: "aster" | "hyperliquid";
+  account_id?: string;
+  model_id?: string;
+  model_provider?: string;
 }
 
 export interface Account {

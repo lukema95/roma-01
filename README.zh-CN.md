@@ -18,7 +18,7 @@
 本平台采用 **NOF1 风格的前端界面**（[nof1.ai](https://nof1.ai/)），具有以下特点：
 - 🏆 **竞技排行榜**：实时并排比较多个 AI 交易模型
 - 📊 **性能可视化**：跟踪所有模型的账户价值、盈亏和交易指标
-- 🎨 **模型展示**：同时显示多达 6 个不同的 LLM 模型（DeepSeek、Qwen、Claude、Grok、Gemini、GPT）
+- 🎨 **智能体展示**：显示多个交易智能体，每个智能体可将任意 DEX 账户与任意 LLM 模型组合
 - 📈 **实时交易面板**：监控持仓、已完成交易和 AI 决策过程
 - 📝 **自定义提示词**：用户定义的交易策略
 - 💬 **AI 聊天助手**：交互式聊天界面，获取交易建议、提示词建议和平台指导
@@ -68,7 +68,7 @@ ROMA 是一个**元智能体框架**，使用递归分层结构来解决复杂�
 - 🤖 **AI 驱动交易**：使用 DSPy 和大语言模型进行智能决策
 - 🔄 **多智能体架构**：同时运行多个交易策略
 - ⚖️ **高级风险管理**：4 层风险控制系统，带有持仓限制
-- 🌐 **Web3 集成**：直接集成 Aster Finance DEX
+- 🌐 **多 DEX 支持**：直接集成 Aster Finance DEX 和 Hyperliquid DEX
 - 📊 **监控仪表板**：Next.js Web 界面，用于跟踪智能体和持仓
 - 📈 **性能跟踪**：全面的指标和决策历史
 - 🔐 **生产就绪**：安全、经过测试、久经考验
@@ -161,9 +161,11 @@ npm run dev
 
 ### 核心组件
 
-- **智能体管理器**：协调多个具有独立账户的 AI 交易智能体
+- **智能体管理器**：使用账户中心化架构协调多个 AI 交易智能体
 - **交易智能体**：使用 DSPy + LLM 进行决策（DeepSeek、Qwen、Claude、Grok、Gemini、GPT）
-- **DEX 工具包**：通过 EIP-191 签名集成 Aster Finance 永续合约
+- **DEX 工具包**：
+  - **AsterToolkit**：通过 EIP-191 签名集成 Aster Finance 永续合约
+  - **HyperliquidToolkit**：通过原生 API 集成 Hyperliquid DEX
 - **技术分析**：TA-Lib 指标（RSI、MACD、EMA、ATR、布林带）
 - **风险管理**：多层持仓和资金保护（4 层系统）
 - **决策记录器**：以 JSON 格式记录所有交易和 AI 推理
@@ -203,27 +205,65 @@ npm run dev
 
 ## ⚙️ 配置
 
-### 智能体
+### 账户中心化架构
 
-使用不同策略运行一个或多个智能体。每个智能体使用其专用的交易账户：
+ROMA-01 使用**账户中心化**配置模型，其中：
+- **账户 (Accounts)** 定义 DEX 交易账户（Aster、Hyperliquid 等）
+- **模型 (Models)** 定义 LLM 配置（DeepSeek、Qwen、Claude 等）
+- **智能体 (Agents)** 将账户与模型绑定以创建交易智能体
+
+这允许灵活组合：任何账户可以使用任何模型，您可以运行具有不同配置的多个智能体。
 
 ```yaml
 # config/trading_config.yaml
-agents:
-  - id: "deepseek-chat-v3.1"
-    name: "DEEPSEEK CHAT V3.1"
-    enabled: true
-    config_file: "config/models/deepseek-chat-v3.1.yaml"
+
+# 定义 DEX 账户
+accounts:
+  - id: "aster-acc-01"
+    dex_type: "aster"
+    user: ${ASTER_USER_01}
+    signer: ${ASTER_SIGNER_01}
+    private_key: ${ASTER_PRIVATE_KEY_01}
+  
+  - id: "hl-acc-01"
+    dex_type: "hyperliquid"
+    api_secret: ${HL_SECRET_KEY_01}
+    account_id: ${HL_ACCOUNT_ADDRESS_01}
+
+# 定义 LLM 模型
+models:
+  - id: "deepseek-v3.1"
+    provider: "deepseek"
+    api_key: ${DEEPSEEK_API_KEY}
+    model: "deepseek-chat"
   
   - id: "qwen3-max"
-    name: "QWEN3 MAX"
-    enabled: false
-    config_file: "config/models/qwen3-max.yaml"
+    provider: "qwen"
+    api_key: ${QWEN_API_KEY}
+    model: "qwen-max"
+
+# 通过绑定账户和模型创建智能体
+agents:
+  - id: "deepseek-aster-01"
+    name: "DeepSeek on Aster-01"
+    enabled: true
+    account_id: "aster-acc-01"
+    model_id: "deepseek-v3.1"
   
-  # ... 其他模型
+  - id: "qwen-hl-01"
+    name: "Qwen on Hyperliquid-01"
+    enabled: true
+    account_id: "hl-acc-01"
+    model_id: "qwen3-max"
 ```
 
-**注意**：启用多个智能体可同时运行它们以进行策略比较。
+**优势**：
+- ✅ 灵活组合账户和模型
+- ✅ 在同一 DEX 上运行多个使用不同模型的智能体
+- ✅ 在不同 DEX 上运行多个智能体
+- ✅ 每个智能体可以有自定义提示词和策略
+
+查看 [backend/config/README_CONFIG.md](backend/config/README_CONFIG.md) 获取详细配置指南。
 
 ### 交易对
 
@@ -259,33 +299,30 @@ risk_management:
 
 查看 [backend/config/README.md](backend/config/README.md) 获取详细配置指南。
 
+### 支持的 DEX
+
+- **Aster Finance**：通过 EIP-191 签名的永续合约
+  - 支持做多/做空持仓
+  - 杠杆最高 10 倍
+  - 多个交易对（BTC、ETH、SOL、BNB、DOGE、XRP）
+
+- **Hyperliquid**：原生 DEX 集成
+  - 支持做多/做空持仓
+  - 杠杆管理
+  - 多个交易对（BTC、ETH、SOL 等）
+
 ### 支持的 LLM
 
-每个模型都有自己的配置文件和专用交易账户：
+所有模型都可以与任何 DEX 账户组合：
 
 - **DeepSeek**（推荐 - 快速且便宜，约 $0.14 每 100 万 token）
-  - 模型：`deepseek-chat`
-  - 配置：`config/models/deepseek-chat-v3.1.yaml`
+- **Qwen** - 推理能力强，多语言支持
+- **Claude** (Anthropic) - 高质量，价格较高
+- **Grok** (xAI) - 实时数据访问
+- **Gemini** (Google) - 性能强劲
+- **GPT** (OpenAI) - 最新模型
 
-- **Qwen**
-  - 模型：`qwen-max`
-  - 配置：`config/models/qwen3-max.yaml`
-
-- **Claude**（Anthropic）
-  - 模型：`claude-sonnet-4.5`
-  - 配置：`config/models/claude-sonnet-4.5.yaml`
-
-- **Grok**（xAI）
-  - 模型：`grok-4`
-  - 配置：`config/models/grok-4.yaml`
-
-- **Gemini**（Google）
-  - 模型：`gemini-2.5-pro`
-  - 配置：`config/models/gemini-2.5-pro.yaml`
-
-- **GPT**（OpenAI）
-  - 模型：`gpt-5`
-  - 配置：`config/models/gpt-5.yaml`
+查看 [backend/config/README_CONFIG.md](backend/config/README_CONFIG.md) 获取完整配置示例。
 
 ---
 
@@ -293,15 +330,17 @@ risk_management:
 
 ### 已支持
 - ✅ 永续合约（做多和做空）
-- ✅ Aster Finance DEX
+- ✅ **Aster Finance DEX** - 通过 EIP-191 签名完整集成
+- ✅ **Hyperliquid DEX** - 原生 API 集成，支持杠杆管理
+- ✅ **账户中心化架构** - 灵活的账户与模型绑定
 - ✅ 多种杠杆选项（1-10 倍）
 - ✅ 技术指标（RSI、MACD、布林带）
 - ✅ 自动持仓规模计算
 - ✅ 止损和止盈
 - ✅ 多智能体策略
+- ✅ 每个智能体可自定义提示词
 
 ### 即将推出
-- 🔜 Hyperliquid DEX 支持
 - 🔜 回测模块
 - 🔜 策略优化
 - 🔜 移动通知
@@ -473,10 +512,12 @@ roma-01/
 - ✅ **前端**：生产就绪
 - ✅ **风险管理**：已完全实现（4层系统）
 - ✅ **Aster DEX**：已集成并测试
+- ✅ **Hyperliquid DEX**：已集成并测试
+- ✅ **账户中心化架构**：灵活的智能体配置
 - ✅ **技术分析**：RSI、MACD、布林带、EMA、ATR
+- ✅ **多 DEX 支持**：同时在不同 DEX 上运行智能体
 - 🔜 **多信息源分析**：新闻、社交、链上、宏观数据
 - 🔜 **ROMA 集成**：完整层次化决策架构
-- 🔜 **Hyperliquid DEX**：额外交易所支持
 - 🔜 **回测**：策略测试与优化
 
 ---
@@ -536,7 +577,7 @@ MIT 许可证 - 详见 [LICENSE](LICENSE) 文件。
 
 **用 ❤️ 使用 ROMA、DSPy 和 AI 构建**
 
-**最后更新**：2025-11-05  
-**版本**：1.2.0  
+**最后更新**：2025-11-06  
+**版本**：1.3.0  
 **状态**：生产就绪 ✅
 

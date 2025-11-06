@@ -8,7 +8,8 @@ export const translations = {
     header: {
       live: "Live",
       leaderboard: "Leaderboard",
-      models: "Models",
+      models: "Models", // Keep for backward compatibility
+      agents: "Agents",
       about: "About",
       running: "RUNNING",
     },
@@ -68,6 +69,13 @@ export const translations = {
       noPositions: "No open positions",
       noTrades: "No completed trades yet",
       noDecisions: "No decisions yet",
+      // Multi-DEX filters
+      filterDex: "DEX:",
+      filterAccount: "ACCOUNT:",
+      allDex: "ALL DEX",
+      allAccounts: "ALL ACCOUNTS",
+      aster: "Aster",
+      hyperliquid: "Hyperliquid",
     },
     
     // Positions
@@ -304,7 +312,8 @@ Long-short balance:
     header: {
       live: "实时",
       leaderboard: "排行榜",
-      models: "模型",
+      models: "模型", // Keep for backward compatibility
+      agents: "智能体",
       about: "关于",
       running: "运行中",
     },
@@ -364,6 +373,13 @@ Long-short balance:
       noPositions: "暂无持仓",
       noTrades: "暂无已完成交易",
       noDecisions: "暂无决策记录",
+      // Multi-DEX filters
+      filterDex: "DEX：",
+      filterAccount: "账户：",
+      allDex: "所有 DEX",
+      allAccounts: "所有账户",
+      aster: "Aster",
+      hyperliquid: "Hyperliquid",
     },
     
     // Positions

@@ -18,7 +18,7 @@ English | [简体中文](README.zh-CN.md)
 This platform features a **NOF1-inspired frontend interface** ([nof1.ai](https://nof1.ai/)) that allows you to:
 - 🏆 **Competitive Leaderboard**: Compare multiple AI trading models side-by-side in real-time
 - 📊 **Performance Visualization**: Track account values, P/L, and trading metrics across all models
-- 🎨 **Model Showcase**: Display up to 6 different LLM models (DeepSeek, Qwen, Claude, Grok, Gemini, GPT) running simultaneously
+- 🎨 **Agent Showcase**: Display multiple trading agents, each combining any DEX account with any LLM model
 - 📈 **Live Trading Dashboard**: Monitor positions, completed trades, and AI decision-making processes
 - 📝 **Custom Prompts**: User-defined trading strategies
 - 💬 **AI Chat Assistant**: Interactive chat interface for getting trading advice, prompt suggestions, and platform guidance
@@ -68,7 +68,7 @@ ROMA is a **meta-agent framework** that uses recursive hierarchical structures t
 - 🤖 **AI-Driven Trading**: Uses DSPy and large language models for intelligent decision-making
 - 🔄 **Multi-Agent Architecture**: Run multiple trading strategies simultaneously
 - ⚖️ **Advanced Risk Management**: 4-layer risk control system with position limits
-- 🌐 **Web3 Integration**: Direct integration with Aster Finance DEX
+- 🌐 **Multi-DEX Support**: Direct integration with Aster Finance DEX and Hyperliquid DEX
 - 📊 **Monitoring Dashboard**: Next.js web interface for tracking agents and positions
 - 📈 **Performance Tracking**: Comprehensive metrics and decision history
 - 🔐 **Production Ready**: Secure, tested, and battle-hardened
@@ -161,9 +161,11 @@ npm run dev
 
 ### Key Components
 
-- **Agent Manager**: Orchestrates multiple AI trading agents with independent accounts
+- **Agent Manager**: Orchestrates multiple AI trading agents with account-centric architecture
 - **Trading Agent**: Makes decisions using DSPy + LLMs (DeepSeek, Qwen, Claude, Grok, Gemini, GPT)
-- **DEX Toolkit**: Integrates with Aster Finance perpetual futures with EIP-191 signing
+- **DEX Toolkits**: 
+  - **AsterToolkit**: Integrates with Aster Finance perpetual futures with EIP-191 signing
+  - **HyperliquidToolkit**: Integrates with Hyperliquid DEX with native API support
 - **Technical Analysis**: TA-Lib indicators (RSI, MACD, EMA, ATR, Bollinger Bands)
 - **Risk Management**: Multi-layer position and capital protection (4-layer system)
 - **Decision Logger**: Records all trades and AI reasoning in JSON format
@@ -222,45 +224,65 @@ Every 3-5 minutes:
 
 ## ⚙️ Configuration
 
-### Agents
+### Account-Centric Architecture
 
-Run one or multiple agents with different strategies. Each agent uses its own dedicated trading account:
+ROMA-01 uses an **account-centric** configuration model where:
+- **Accounts** define DEX trading accounts (Aster, Hyperliquid, etc.)
+- **Models** define LLM configurations (DeepSeek, Qwen, Claude, etc.)
+- **Agents** bind accounts with models to create trading agents
+
+This allows flexible combinations: any account can use any model, and you can run multiple agents with different configurations.
 
 ```yaml
 # config/trading_config.yaml
-agents:
-  - id: "deepseek-chat-v3.1"
-    name: "DEEPSEEK CHAT V3.1"
-    enabled: true
-    config_file: "config/models/deepseek-chat-v3.1.yaml"
+
+# Define DEX accounts
+accounts:
+  - id: "aster-acc-01"
+    dex_type: "aster"
+    user: ${ASTER_USER_01}
+    signer: ${ASTER_SIGNER_01}
+    private_key: ${ASTER_PRIVATE_KEY_01}
+  
+  - id: "hl-acc-01"
+    dex_type: "hyperliquid"
+    api_secret: ${HL_SECRET_KEY_01}
+    account_id: ${HL_ACCOUNT_ADDRESS_01}
+
+# Define LLM models
+models:
+  - id: "deepseek-v3.1"
+    provider: "deepseek"
+    api_key: ${DEEPSEEK_API_KEY}
+    model: "deepseek-chat"
   
   - id: "qwen3-max"
-    name: "QWEN3 MAX"
-    enabled: false
-    config_file: "config/models/qwen3-max.yaml"
+    provider: "qwen"
+    api_key: ${QWEN_API_KEY}
+    model: "qwen-max"
+
+# Create agents by binding accounts and models
+agents:
+  - id: "deepseek-aster-01"
+    name: "DeepSeek on Aster-01"
+    enabled: true
+    account_id: "aster-acc-01"
+    model_id: "deepseek-v3.1"
   
-  - id: "claude-sonnet-4.5"
-    name: "CLAUDE SONNET 4.5"
-    enabled: false
-    config_file: "config/models/claude-sonnet-4.5.yaml"
-  
-  - id: "grok-4"
-    name: "GROK 4"
-    enabled: false
-    config_file: "config/models/grok-4.yaml"
-  
-  - id: "gemini-2.5-pro"
-    name: "GEMINI 2.5 PRO"
-    enabled: false
-    config_file: "config/models/gemini-2.5-pro.yaml"
-  
-  - id: "gpt-5"
-    name: "GPT 5"
-    enabled: false
-    config_file: "config/models/gpt-5.yaml"
+  - id: "qwen-hl-01"
+    name: "Qwen on Hyperliquid-01"
+    enabled: true
+    account_id: "hl-acc-01"
+    model_id: "qwen3-max"
 ```
 
-**Note**: Enable multiple agents to run them simultaneously for strategy comparison.
+**Benefits**:
+- ✅ Mix and match accounts with models
+- ✅ Run multiple agents on same DEX with different models
+- ✅ Run multiple agents on different DEXs
+- ✅ Each agent can have custom prompts and strategy
+
+See [backend/config/README_CONFIG.md](backend/config/README_CONFIG.md) for detailed configuration guide.
 
 ### Trading Pairs
 
@@ -296,33 +318,30 @@ risk_management:
 
 See [backend/config/README.md](backend/config/README.md) for detailed configuration guide.
 
+### Supported DEXs
+
+- **Aster Finance**: Perpetual futures with EIP-191 signing
+  - Supports long/short positions
+  - Leverage up to 10x
+  - Multiple trading pairs (BTC, ETH, SOL, BNB, DOGE, XRP)
+
+- **Hyperliquid**: Native DEX integration
+  - Supports long/short positions
+  - Leverage management
+  - Multiple trading pairs (BTC, ETH, SOL, etc.)
+
 ### Supported LLMs
 
-Each model has its own configuration file and dedicated trading account:
+All models can be combined with any DEX account:
 
 - **DeepSeek** (Recommended - fast & cheap, ~$0.14 per 1M tokens)
-  - Model: `deepseek-chat`
-  - Config: `config/models/deepseek-chat-v3.1.yaml`
+- **Qwen** - Good reasoning, multilingual
+- **Claude** (Anthropic) - High quality, expensive
+- **Grok** (xAI) - Real-time data access
+- **Gemini** (Google) - Strong performance
+- **GPT** (OpenAI) - Latest models
 
-- **Qwen**
-  - Model: `qwen-max`
-  - Config: `config/models/qwen3-max.yaml`
-
-- **Claude** (Anthropic)
-  - Model: `claude-sonnet-4.5`
-  - Config: `config/models/claude-sonnet-4.5.yaml`
-
-- **Grok** (xAI)
-  - Model: `grok-4`
-  - Config: `config/models/grok-4.yaml`
-
-- **Gemini** (Google)
-  - Model: `gemini-2.5-pro`
-  - Config: `config/models/gemini-2.5-pro.yaml`
-
-- **GPT** (OpenAI)
-  - Model: `gpt-5`
-  - Config: `config/models/gpt-5.yaml`
+See [backend/config/README_CONFIG.md](backend/config/README_CONFIG.md) for complete configuration examples.
 
 ---
 
@@ -330,15 +349,17 @@ Each model has its own configuration file and dedicated trading account:
 
 ### Supported
 - ✅ Perpetual futures (long & short)
-- ✅ Aster Finance DEX
+- ✅ **Aster Finance DEX** - Full integration with EIP-191 signing
+- ✅ **Hyperliquid DEX** - Native API integration with leverage management
+- ✅ **Account-Centric Architecture** - Flexible binding of accounts to models
 - ✅ Multiple leverage options (1-10x)
 - ✅ Technical indicators (RSI, MACD, BB)
 - ✅ Auto position sizing
 - ✅ Stop loss & take profit
 - ✅ Multi-agent strategies
+- ✅ Custom prompts per agent
 
 ### Coming Soon
-- 🔜 Hyperliquid DEX support
 - 🔜 Backtesting module
 - 🔜 Strategy optimization
 - 🔜 Mobile notifications
@@ -509,10 +530,12 @@ roma-01/
 - ✅ **Frontend**: Production ready
 - ✅ **Risk Management**: Fully implemented (4-layer system)
 - ✅ **Aster DEX**: Integrated & tested
+- ✅ **Hyperliquid DEX**: Integrated & tested
+- ✅ **Account-Centric Architecture**: Flexible agent configuration
 - ✅ **Technical Analysis**: RSI, MACD, BB, EMA, ATR
+- ✅ **Multi-DEX Support**: Run agents on different DEXs simultaneously
 - 🔜 **Multi-Source Analysis**: News, social, on-chain, macro data
 - 🔜 **ROMA Integration**: Full hierarchical decision architecture
-- 🔜 **Hyperliquid DEX**: Additional exchange support
 - 🔜 **Backtesting**: Strategy testing and optimization
 
 ---
@@ -570,7 +593,7 @@ MIT License - see the [LICENSE](LICENSE) file for details.
 
 **Built with ❤️ using ROMA, DSPy, and AI**
 
-**Last Updated**: 2025-11-05  
-**Version**: 1.2.0  
+**Last Updated**: 2025-11-06  
+**Version**: 1.3.0  
 **Status**: Production Ready ✅
 

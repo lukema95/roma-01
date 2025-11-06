@@ -449,7 +449,8 @@ async def update_custom_prompts(agent_id: str, prompts: CustomPromptUpdate):
     """
     Update agent's custom prompts
     
-    Configuration is saved to YAML file immediately and takes effect in next trading cycle
+    For account-centric configuration: Updates in-memory config (takes effect immediately)
+    For legacy configuration: Updates both in-memory and config file
     
     Args:
         agent_id: Agent identifier
@@ -462,51 +463,56 @@ async def update_custom_prompts(agent_id: str, prompts: CustomPromptUpdate):
         # Get agent
         agent = agent_manager.get_agent(agent_id)
         
-        # Find config file path using Path for better cross-platform support
-        from pathlib import Path
+        # Ensure custom_prompts section exists in agent config
+        if "strategy" not in agent.config:
+            agent.config["strategy"] = {}
+        if "custom_prompts" not in agent.config["strategy"]:
+            agent.config["strategy"]["custom_prompts"] = {}
         
-        # Try relative path first (when running from backend/)
-        config_path = Path("config/models") / f"{agent_id}.yaml"
-        
-        if not config_path.exists():
-            # Try from project root
-            config_path = Path("backend/config/models") / f"{agent_id}.yaml"
-        
-        if not config_path.exists():
-            logger.error(f"Config file not found for agent {agent_id} at {config_path}")
-            raise HTTPException(
-                status_code=404, 
-                detail=f"Config file not found: {agent_id}.yaml"
-            )
-        
-        logger.debug(f"Using config file: {config_path.absolute()}")
-        
-        # Read current configuration
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = yaml.safe_load(f)
-        
-        # Ensure custom_prompts section exists
-        if "custom_prompts" not in config["strategy"]:
-            config["strategy"]["custom_prompts"] = {}
-        
-        # Update fields
+        # Update fields in memory configuration
         for field, value in prompts.dict(exclude_unset=True).items():
             if value is not None:
-                config["strategy"]["custom_prompts"][field] = value
+                agent.config["strategy"]["custom_prompts"][field] = value
         
-        # Save configuration to file
-        with open(config_path, "w", encoding="utf-8") as f:
-            yaml.dump(config, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+        # Try to save to file for legacy mode (if config file exists)
+        # For account-centric mode, we only update in-memory config
+        # Users can manually update trading_config.yaml if they want persistence
+        from pathlib import Path
         
-        # Update in-memory configuration (takes effect immediately)
-        agent.config["strategy"]["custom_prompts"] = config["strategy"]["custom_prompts"]
+        # Try to find legacy config file
+        config_path = Path("config/models") / f"{agent_id}.yaml"
+        if not config_path.exists():
+            config_path = Path("backend/config/models") / f"{agent_id}.yaml"
         
-        logger.info(f"Updated custom prompts for agent {agent_id}")
+        if config_path.exists():
+            # Legacy mode: update config file
+            logger.debug(f"Updating legacy config file: {config_path.absolute()}")
+            with open(config_path, "r", encoding="utf-8") as f:
+                file_config = yaml.safe_load(f)
+            
+            if "strategy" not in file_config:
+                file_config["strategy"] = {}
+            if "custom_prompts" not in file_config["strategy"]:
+                file_config["strategy"]["custom_prompts"] = {}
+            
+            # Sync with in-memory config
+            file_config["strategy"]["custom_prompts"] = agent.config["strategy"]["custom_prompts"]
+            
+            with open(config_path, "w", encoding="utf-8") as f:
+                yaml.dump(file_config, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+            
+            logger.info(f"Updated custom prompts for agent {agent_id} (legacy mode - saved to file)")
+        else:
+            # Account-centric mode: only update in-memory
+            logger.info(
+                f"Updated custom prompts for agent {agent_id} (account-centric mode - in-memory only). "
+                f"Update trading_config.yaml manually if you want persistence."
+            )
         
         return {
             "status": "success",
             "message": f"Custom prompts updated for agent {agent_id}. Will take effect in next trading cycle.",
-            "data": config["strategy"]["custom_prompts"]
+            "data": agent.config["strategy"]["custom_prompts"]
         }
     
     except ValueError as e:

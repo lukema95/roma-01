@@ -18,7 +18,7 @@ export default function ModelsPage() {
         <Header />
         <div className="flex-1 flex items-center justify-center">
           <div className="p-6 rounded border" style={{ background: "var(--panel-bg)", borderColor: "var(--panel-border)" }}>
-            <p className="font-semibold mb-2" style={{ color: "#ef4444" }}>Failed to load models</p>
+            <p className="font-semibold mb-2" style={{ color: "#ef4444" }}>Failed to load agents</p>
             <p className="text-sm" style={{ color: "var(--muted-text)" }}>{error.message}</p>
           </div>
         </div>
@@ -33,7 +33,7 @@ export default function ModelsPage() {
         <div className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-4">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{ borderColor: "var(--brand-accent)" }}></div>
-            <p style={{ color: "var(--muted-text)" }}>Loading models...</p>
+            <p style={{ color: "var(--muted-text)" }}>Loading agents...</p>
           </div>
         </div>
       </div>
@@ -47,7 +47,7 @@ export default function ModelsPage() {
       <main className="flex-1 p-6">
         <div className="max-w-6xl mx-auto">
           <h1 className="text-3xl font-bold mb-2" style={{ color: "var(--foreground)" }}>
-            Trading Models
+            Trading Agents
           </h1>
           <p className="mb-8" style={{ color: "var(--muted-text)" }}>
             AI-powered trading agents running on the platform
@@ -76,7 +76,7 @@ export default function ModelsPage() {
                           style={{ background: getModelColor(agent.id) }}
                         />
                         <h3 className="font-bold text-lg" style={{ color: "var(--foreground)" }}>
-                          {getModelName(agent.id)}
+                          {agent.name || agent.id}
                         </h3>
                       </div>
                       <p className="text-xs mb-2" style={{ color: "var(--muted-text)" }}>
@@ -133,10 +133,10 @@ export default function ModelsPage() {
           {agents.length === 0 && (
             <div className="text-center py-20">
               <div className="text-6xl mb-4">🤖</div>
-              <p className="text-xl mb-2" style={{ color: "var(--foreground)" }}>No models configured</p>
-              <p style={{ color: "var(--muted-text)" }}>
-                Configure trading models in the backend to see them here
-              </p>
+            <p className="text-xl mb-2" style={{ color: "var(--foreground)" }}>No agents configured</p>
+            <p style={{ color: "var(--muted-text)" }}>
+              Configure trading agents in the backend to see them here
+            </p>
             </div>
           )}
         </div>

@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/api";
-import { getModelName, getModelColor, getAllModels } from "@/lib/model/meta";
+import { getModelColor } from "@/lib/model/meta";
 import { fmtUSD } from "@/lib/utils/formatters";
 import { getCoinIcon } from "@/lib/utils/coinIcons";
 import LeaderboardTable from "./LeaderboardTable";
@@ -21,21 +21,20 @@ export default function LeaderboardOverview() {
     refreshInterval: 10000,
   });
 
-  // Get all defined models and merge with running agents
+  // Use agents directly from API, no need to merge with predefined models
   const agents = useMemo(() => {
-    const allModels = getAllModels();
-    const runningMap = new Map((runningAgents || []).map(a => [a.id, a]));
-    
-    return allModels.map(model => {
-      const runningAgent = runningMap.get(model.id);
-      return {
-        id: model.id,
-        name: model.name,
-        is_running: runningAgent?.is_running || false,
-        cycle_count: runningAgent?.cycle_count || 0,
-        runtime_minutes: runningAgent?.runtime_minutes || 0,
-      };
-    });
+    return (runningAgents || []).map(a => ({
+      id: a.id,
+      name: a.name || a.id,
+      is_running: a.is_running || false,
+      cycle_count: a.cycle_count || 0,
+      runtime_minutes: a.runtime_minutes || 0,
+      // Multi-DEX fields from API
+      dex_type: a.dex_type,
+      account_id: a.account_id,
+      model_id: a.model_id,
+      model_provider: a.model_provider,
+    }));
   }, [runningAgents]);
 
   // Fetch account data for all running agents using a single aggregated endpoint approach
@@ -189,7 +188,7 @@ function WinnerCard({ agent, symbols }: { agent: any; symbols: string[] }) {
             />
             <div className="flex-1">
               <div className="text-base font-bold" style={{ color: "var(--foreground)" }}>
-                {getModelName(agent.id)}
+                {agent.name || agent.id}
               </div>
             </div>
           </div>
@@ -338,7 +337,7 @@ function ModelBarsChart({ agents }: { agents: any[] }) {
                 />
               </div>
               <div className="text-[11px] text-center" style={{ color: "var(--muted-text)" }}>
-                {getModelName(agent.id)}
+                {agent.name || agent.id}
               </div>
             </div>
           );
