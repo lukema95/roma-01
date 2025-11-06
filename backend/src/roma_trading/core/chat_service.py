@@ -51,8 +51,19 @@ class ChatService:
                             max_tokens=2000,
                         )
                     elif provider == "qwen":
+                        # Qwen uses DashScope API (OpenAI-compatible)
+                        # Support different regions: china uses dashscope.aliyuncs.com, others use dashscope-intl.aliyuncs.com
+                        model_name = model if model else "qwen-max"
+                        location = llm_config.get("location", "china").lower()
+                        if location == "china":
+                            api_base = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+                        else:
+                            api_base = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+                        
+                        # Use "dashscope/" prefix for DashScope models
                         lm = dspy.LM(
-                            f"qwen/{model}" if model else "qwen/qwen-max",
+                            f"dashscope/{model_name}",
+                            api_base=api_base,
                             api_key=api_key,
                             temperature=0.7,
                             max_tokens=2000,
@@ -113,8 +124,19 @@ class ChatService:
                         max_tokens=2000,
                     )
                 elif provider == "qwen":
+                    # Qwen uses DashScope API (OpenAI-compatible)
+                    # Support different regions: china uses dashscope.aliyuncs.com, others use dashscope-intl.aliyuncs.com
+                    model_name = model if model else "qwen-max"
+                    location = llm_config.get("location", "china").lower()
+                    if location == "china":
+                        api_base = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+                    else:
+                        api_base = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+                    
+                    # Use "dashscope/" prefix for DashScope models
                     lm = dspy.LM(
-                        f"qwen/{model}" if model else "qwen/qwen-max",
+                        f"dashscope/{model_name}",
+                        api_base=api_base,
                         api_key=api_key,
                         temperature=0.7,
                         max_tokens=2000,

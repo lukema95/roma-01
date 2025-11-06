@@ -67,6 +67,7 @@ models:
     provider: "qwen"
     api_key: ${QWEN_API_KEY}
     model: "qwen-max"
+    location: "china"  # "china" for China region, "international" or other values for international region
     temperature: 0.15
     max_tokens: 4000
   
