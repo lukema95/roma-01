@@ -108,10 +108,14 @@ function LeaderboardRow({
     );
   }
 
-  // Use first equity history point as initial balance, fallback to 10000 if no history
-  const initialBalance = equityHistory.length > 0 ? equityHistory[0].equity : 10000;
-  const equity = account.total_wallet_balance;
-  const totalPnl = equity - initialBalance;
+  const equityAdjusted = account.adjusted_total_balance ?? account.total_wallet_balance ?? 0;
+  // Use first equity history point as initial balance, fallback to adjusted equity or 10000
+  const initialPoint = equityHistory.length > 0 ? equityHistory[0] : null;
+  const initialBalance = initialPoint
+    ? initialPoint.adjusted_equity ?? initialPoint.equity
+    : equityAdjusted || 10000;
+  const equityDisplay = account.gross_total_balance ?? account.total_wallet_balance ?? equityAdjusted;
+  const totalPnl = equityAdjusted - initialBalance;
   const returnPct = initialBalance > 0 ? (totalPnl / initialBalance) * 100 : 0;
   const sharpe = returnPct > 0 ? returnPct / 100 : returnPct / 50;
 
@@ -153,7 +157,7 @@ function LeaderboardRow({
         </Link>
       </td>
       <td className="py-1.5 pr-2 tabular-nums font-semibold" style={{ color: "var(--brand-accent)" }}>
-        {fmtUSD(equity)}
+        {fmtUSD(equityDisplay)}
       </td>
       {mode === "advanced" ? (
         <>
