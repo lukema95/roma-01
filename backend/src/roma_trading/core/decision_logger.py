@@ -4,6 +4,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
+
+CASH_FLOW_EPSILON = 1e-6
 from loguru import logger
 
 
@@ -32,14 +34,24 @@ class DecisionLogger:
         # File paths for persistent storage
         self.trades_file = self.log_dir / "trade_history.json"
         self.equity_file = self.log_dir / "equity_history.json"
+        self.cash_flow_file = self.log_dir / "cash_flow_state.json"
         
         # In-memory trade tracking
         self.open_positions: Dict[str, Dict] = {}  # key: "symbol_side"
         self.trade_history: List[Dict] = []
         self.equity_history: List[Dict] = []
+
+        # Runtime state for cash flow tracking
+        self._net_deposits: float = 0.0
+        self._last_equity: Optional[float] = None
+        self._last_unrealized: Optional[float] = None
+        self._last_logged_trade_index: int = 0
+        self._last_external_cash_flow: float = 0.0
         
         # Load existing history from files
         self._load_history()
+        self._load_cash_flow_state()
+        self._initialize_runtime_state()
         
         logger.info(f"Initialized DecisionLogger for agent={agent_id}, loaded {len(self.trade_history)} trades")
 
@@ -63,6 +75,38 @@ class DecisionLogger:
         """
         timestamp = datetime.now()
         filename = f"decision_{timestamp.strftime('%Y%m%d_%H%M%S')}_cycle{cycle}.json"
+
+        current_equity = float(account.get("total_wallet_balance", 0.0))
+        current_unrealized = float(account.get("total_unrealized_profit", 0.0))
+
+        # Calculate realized PnL since last log
+        new_trades = []
+        if self._last_logged_trade_index < len(self.trade_history):
+            new_trades = self.trade_history[self._last_logged_trade_index:]
+        realized_change = sum(t.get("pnl_usdt", 0.0) for t in new_trades)
+
+        equity_delta = 0.0
+        unrealized_delta = 0.0
+        external_cash_flow = 0.0
+        if self._last_equity is not None:
+            equity_delta = current_equity - self._last_equity
+            unrealized_delta = current_unrealized - (self._last_unrealized or 0.0)
+            external_cash_flow = equity_delta - realized_change - unrealized_delta
+            if abs(external_cash_flow) < CASH_FLOW_EPSILON:
+                external_cash_flow = 0.0
+            if external_cash_flow != 0.0:
+                self._net_deposits += external_cash_flow
+                logger.debug(
+                    "Detected external cash flow: %+0.2f USDT (cumulative %+0.2f)",
+                    external_cash_flow,
+                    self._net_deposits,
+                )
+
+        adjusted_equity = current_equity - self._net_deposits
+        account["gross_total_balance"] = current_equity
+        account["adjusted_total_balance"] = adjusted_equity
+        account["net_deposits"] = self._net_deposits
+        account["external_cash_flow"] = external_cash_flow
         
         log_data = {
             "timestamp": timestamp.isoformat(),
@@ -78,15 +122,28 @@ class DecisionLogger:
             json.dump(log_data, f, indent=2)
         
         # Update equity history
-        self.equity_history.append({
+        self._last_equity = current_equity
+        self._last_unrealized = current_unrealized
+        self._last_logged_trade_index = len(self.trade_history)
+        self._last_external_cash_flow = external_cash_flow
+
+        entry = {
             "timestamp": timestamp.isoformat(),
             "cycle": cycle,
-            "equity": account.get("total_wallet_balance", 0.0),
-            "pnl": account.get("total_unrealized_profit", 0.0),
-        })
+            "equity": adjusted_equity,
+            "adjusted_equity": adjusted_equity,
+            "gross_equity": current_equity,
+            "unrealized_pnl": current_unrealized,
+            "pnl": current_unrealized,
+            "net_deposits": self._net_deposits,
+            "external_cash_flow": external_cash_flow,
+        }
+
+        self.equity_history.append(entry)
         
         # Save equity history to file
         self._save_equity_history()
+        self._save_cash_flow_state()
         
         logger.info(f"Logged decision cycle {cycle} for agent {self.agent_id}")
 
@@ -261,9 +318,8 @@ class DecisionLogger:
 
     def get_equity_history(self, limit: Optional[int] = None) -> List[Dict]:
         """Get equity history."""
-        if limit:
-            return self.equity_history[-limit:]
-        return self.equity_history
+        history = self.equity_history[-limit:] if limit else self.equity_history
+        return [self._ensure_equity_entry_fields(entry) for entry in history]
 
     def get_trade_history(self, limit: Optional[int] = None) -> List[Dict]:
         """Get completed trade history."""
@@ -289,6 +345,7 @@ class DecisionLogger:
                 with open(self.equity_file, "r") as f:
                     self.equity_history = json.load(f)
                 logger.info(f"Loaded {len(self.equity_history)} equity points from {self.equity_file}")
+                self.equity_history = [self._ensure_equity_entry_fields(entry) for entry in self.equity_history]
             except Exception as e:
                 logger.warning(f"Failed to load equity history: {e}")
                 self.equity_history = []
@@ -310,4 +367,86 @@ class DecisionLogger:
             logger.debug(f"Saved {len(self.equity_history)} equity points to {self.equity_file}")
         except Exception as e:
             logger.error(f"Failed to save equity history: {e}")
+
+    def _load_cash_flow_state(self) -> None:
+        """Load cash flow tracking state from disk."""
+        if not self.cash_flow_file.exists():
+            return
+        try:
+            with open(self.cash_flow_file, "r") as f:
+                data = json.load(f)
+            self._net_deposits = float(data.get("net_deposits", 0.0))
+            self._last_equity = data.get("last_equity")
+            self._last_unrealized = data.get("last_unrealized")
+            self._last_external_cash_flow = data.get("last_external_cash_flow", 0.0)
+        except Exception as e:
+            logger.warning(f"Failed to load cash flow state: {e}")
+
+    def _initialize_runtime_state(self) -> None:
+        """Initialize runtime state from loaded history."""
+        self._last_logged_trade_index = len(self.trade_history)
+
+        if self.equity_history:
+            last_entry = self.equity_history[-1]
+            if self._last_equity is None:
+                self._last_equity = last_entry.get("equity")
+            if self._last_unrealized is None:
+                self._last_unrealized = last_entry.get("unrealized_pnl", last_entry.get("pnl", 0.0))
+            # Prefer persisted net deposits if available; otherwise derive from entry
+            if "net_deposits" in last_entry:
+                self._net_deposits = last_entry.get("net_deposits", self._net_deposits)
+            if "external_cash_flow" in last_entry:
+                self._last_external_cash_flow = last_entry.get("external_cash_flow", 0.0)
+
+    def _save_cash_flow_state(self) -> None:
+        """Persist cash flow tracking state to disk."""
+        try:
+            data = {
+                "net_deposits": self._net_deposits,
+                "last_equity": self._last_equity,
+                "last_unrealized": self._last_unrealized,
+                "last_external_cash_flow": self._last_external_cash_flow,
+            }
+            with open(self.cash_flow_file, "w") as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to save cash flow state: {e}")
+
+    def _ensure_equity_entry_fields(self, entry: Dict) -> Dict:
+        """Ensure legacy equity entries contain expected fields."""
+        normalized = dict(entry)
+        if "unrealized_pnl" not in normalized:
+            normalized["unrealized_pnl"] = normalized.get("pnl", 0.0)
+        if "pnl" not in normalized:
+            normalized["pnl"] = normalized.get("unrealized_pnl", 0.0)
+        if "net_deposits" not in normalized:
+            normalized["net_deposits"] = 0.0
+        if "external_cash_flow" not in normalized:
+            normalized["external_cash_flow"] = 0.0
+        if "gross_equity" not in normalized:
+            normalized["gross_equity"] = normalized.get("equity", 0.0)
+        if "adjusted_equity" not in normalized:
+            normalized["adjusted_equity"] = normalized.get("equity", 0.0) - normalized.get("net_deposits", 0.0)
+        normalized["equity"] = normalized.get("adjusted_equity", normalized.get("equity", 0.0))
+        return normalized
+
+    def get_net_deposits(self) -> float:
+        """Return cumulative net deposits (deposits minus withdrawals)."""
+        return self._net_deposits
+
+    def get_last_external_cash_flow(self) -> float:
+        """Return the most recent cycle's detected external cash flow."""
+        return self._last_external_cash_flow
+
+    def augment_account_balance(self, account: Dict) -> Dict:
+        """Augment raw account balance with deposit-adjusted metrics."""
+        enriched = dict(account)
+        current_equity = float(enriched.get("total_wallet_balance", 0.0))
+        adjusted_equity = current_equity - self._net_deposits
+        enriched.setdefault("total_unrealized_profit", float(enriched.get("total_unrealized_profit", 0.0)))
+        enriched["adjusted_total_balance"] = adjusted_equity
+        enriched["gross_total_balance"] = current_equity
+        enriched["net_deposits"] = self._net_deposits
+        enriched.setdefault("external_cash_flow", 0.0)
+        return enriched
 

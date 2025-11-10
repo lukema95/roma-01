@@ -113,6 +113,7 @@ class TradingAgent:
         
         # Initialize performance analyzer
         self.performance = PerformanceAnalyzer()
+        self.last_account_snapshot: Dict = {}
 
         # Advanced order configuration
         self.advanced_orders = self.config["strategy"].get("advanced_orders", {})
@@ -320,6 +321,8 @@ class TradingAgent:
                 account=account,
                 positions=positions,
             )
+
+            self.last_account_snapshot = dict(account)
             
             logger.debug(f"🔓 {self.agent_id} released trading lock")
         
@@ -1112,4 +1115,8 @@ Partial close example:
             "model_id": llm_cfg.get("model"),
             "model_provider": llm_cfg.get("provider"),
         }
+
+    def get_account_snapshot(self) -> Dict:
+        """Return the most recent account snapshot with adjustments."""
+        return dict(self.last_account_snapshot) if self.last_account_snapshot else {}
 

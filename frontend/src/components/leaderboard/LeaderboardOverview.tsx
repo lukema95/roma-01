@@ -75,8 +75,9 @@ export default function LeaderboardOverview() {
     let winner: typeof agents[0] | null = null;
     
     allAccountsData.forEach(({ agentId, data }) => {
-      if (data?.total_wallet_balance && data.total_wallet_balance > maxEquity) {
-        maxEquity = data.total_wallet_balance;
+      const equityValue = data?.adjusted_total_balance ?? data?.total_wallet_balance;
+      if (equityValue && equityValue > maxEquity) {
+        maxEquity = equityValue;
         winner = agents.find(a => a.id === agentId) || null;
       }
     });
@@ -165,7 +166,9 @@ function WinnerCard({ agent, symbols }: { agent: any; symbols: string[] }) {
   );
 
   const color = agent ? getModelColor(agent.id) : undefined;
-  const equity = account?.total_wallet_balance || 0;
+  const equityRaw = account?.gross_total_balance ?? account?.total_wallet_balance ?? 0;
+  const equityAdjusted = account?.adjusted_total_balance ?? equityRaw;
+  const netDeposits = account?.net_deposits ?? 0;
 
   return (
     <div
@@ -199,7 +202,17 @@ function WinnerCard({ agent, symbols }: { agent: any; symbols: string[] }) {
               TOTAL EQUITY
             </div>
             <div className="text-xl font-bold tabular-nums" style={{ color: "var(--foreground)" }}>
-              {fmtUSD(equity)}
+              {fmtUSD(equityRaw)}
+            </div>
+            <div className="mt-2 grid gap-1 text-xs" style={{ color: "var(--muted-text)" }}>
+              <div className="flex items-center justify-between">
+                <span>Net Deposits</span>
+                <span style={{ color: "var(--foreground)" }}>{fmtUSD(netDeposits)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Deposit-Adjusted Equity</span>
+                <span style={{ color: "var(--foreground)" }}>{fmtUSD(equityAdjusted)}</span>
+              </div>
             </div>
           </div>
 

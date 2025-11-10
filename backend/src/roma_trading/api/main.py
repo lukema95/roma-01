@@ -200,7 +200,11 @@ async def get_account(agent_id: str):
     """Get agent's account balance."""
     try:
         agent = agent_manager.get_agent(agent_id)
-        return await agent.dex.get_account_balance()
+        snapshot = agent.get_account_snapshot()
+        if snapshot:
+            return snapshot
+        account = await agent.dex.get_account_balance()
+        return agent.logger_module.augment_account_balance(account)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

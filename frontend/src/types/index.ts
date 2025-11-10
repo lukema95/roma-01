@@ -32,6 +32,10 @@ export interface Account {
   total_wallet_balance: number;
   available_balance: number;
   total_unrealized_profit: number;
+  adjusted_total_balance?: number;
+  gross_total_balance?: number;
+  net_deposits?: number;
+  external_cash_flow?: number;
 }
 
 export interface Position {
@@ -87,7 +91,12 @@ export interface EquityPoint {
   timestamp: string;
   cycle: number;
   equity: number;
+  adjusted_equity?: number;
+  gross_equity?: number;
   pnl: number;
+  unrealized_pnl?: number;
+  net_deposits?: number;
+  external_cash_flow?: number;
 }
 
 export interface Trade {
