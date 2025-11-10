@@ -47,13 +47,20 @@ function useAgentsEquityData(agentIds: string[]) {
             // If equity history is empty but account data exists, create initial point
             if ((!equityData || equityData.length === 0) && accountData) {
               const now = new Date().toISOString();
+              const adjustedEquity = accountData.adjusted_total_balance ?? accountData.total_wallet_balance ?? 0;
+              const grossEquity = accountData.gross_total_balance ?? accountData.total_wallet_balance ?? adjustedEquity;
               return {
                 agentId: id,
                 data: [{
                   timestamp: now,
                   cycle: 0,
-                  equity: accountData.total_wallet_balance || 0,
+                  equity: adjustedEquity,
+                  adjusted_equity: adjustedEquity,
+                  gross_equity: grossEquity,
                   pnl: accountData.total_unrealized_profit || 0,
+                  unrealized_pnl: accountData.total_unrealized_profit || 0,
+                  net_deposits: accountData.net_deposits || 0,
+                  external_cash_flow: accountData.external_cash_flow || 0,
                 }],
               };
             }
@@ -124,62 +131,84 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
   }, []);
 
   // Combine equity history from all agents into chart data
-  const chartData = useMemo(() => {
-    // Create a map of timestamps to data points
-    const timestampMap = new Map<number, any>();
+  const { chartDataGross, chartDataAdjusted } = useMemo(() => {
+    const timestampMap = new Map<number, {
+      timestamp: Date;
+      gross: Record<string, number>;
+      adjusted: Record<string, number>;
+    }>();
 
     equityDataQueries.forEach(({ agentId, data }) => {
       if (!data || data.length === 0) return;
 
       data.forEach((point: EquityPoint) => {
-        const timestamp = new Date(point.timestamp).getTime();
-        if (!timestampMap.has(timestamp)) {
-          timestampMap.set(timestamp, { timestamp: new Date(point.timestamp) });
+        const timestampMs = new Date(point.timestamp).getTime();
+        if (!timestampMap.has(timestampMs)) {
+          timestampMap.set(timestampMs, {
+            timestamp: new Date(point.timestamp),
+            gross: {},
+            adjusted: {},
+          });
         }
-        timestampMap.get(timestamp)![agentId] = point.equity;
+        const bucket = timestampMap.get(timestampMs)!;
+        const gross = point.gross_equity ?? point.equity;
+        const adjusted = point.adjusted_equity ?? point.equity;
+        if (typeof gross === "number") bucket.gross[agentId] = gross;
+        if (typeof adjusted === "number") bucket.adjusted[agentId] = adjusted;
       });
     });
 
-    // Convert map to array and sort by timestamp
-    const points = Array.from(timestampMap.values()).sort(
+    let buckets = Array.from(timestampMap.values()).sort(
       (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
     );
 
-    // Filter by range
-    if (range === "72H" && points.length > 0) {
-      const cutoff = Date.now() - 72 * 60 * 60 * 1000; // 72 hours ago
-      return points.filter(p => p.timestamp.getTime() >= cutoff);
+    if (range === "72H" && buckets.length > 0) {
+      const cutoff = Date.now() - 72 * 60 * 60 * 1000;
+      buckets = buckets.filter((bucket) => bucket.timestamp.getTime() >= cutoff);
     }
 
-    return points;
+    const grossPoints = buckets.map((bucket) => ({
+      timestamp: bucket.timestamp,
+      ...bucket.gross,
+    }));
+
+    const adjustedPoints = buckets.map((bucket) => ({
+      timestamp: bucket.timestamp,
+      ...bucket.adjusted,
+    }));
+
+    return {
+      chartDataGross: grossPoints,
+      chartDataAdjusted: adjustedPoints,
+    };
   }, [equityDataQueries, range]);
 
-  // Calculate initial equity for percentage mode
-  const initialEquity = useMemo(() => {
-    const initial: Record<string, number> = {};
-    if (chartData.length > 0) {
-      runningAgentIds.forEach(id => {
-        initial[id] = chartData[0]?.[id] || 10000;
-      });
-    }
-    return initial;
-  }, [chartData, runningAgentIds]);
-
-  // Convert to percentage if needed
+  // Convert to display data (gross for $, adjusted percentage for %)
   const displayData = useMemo(() => {
     if (mode === "%") {
-      return chartData.map(point => {
+      const initial: Record<string, number> = {};
+      runningAgentIds.forEach((id) => {
+        const firstPoint = chartDataAdjusted.find(
+          (point) => typeof (point as any)[id] === "number"
+        );
+        const value = firstPoint ? (firstPoint as any)[id] : undefined;
+        initial[id] = typeof value === "number" && value !== 0 ? value : 10000;
+      });
+
+      return chartDataAdjusted.map(point => {
         const newPoint: any = { timestamp: point.timestamp };
         runningAgentIds.forEach(id => {
-          if (point[id] !== undefined && initialEquity[id]) {
-            newPoint[id] = ((point[id] - initialEquity[id]) / initialEquity[id]) * 100;
+          const base = initial[id];
+          const value = (point as any)[id];
+          if (typeof value === "number" && typeof base === "number" && base !== 0) {
+            newPoint[id] = ((value - base) / base) * 100;
           }
         });
         return newPoint;
       });
     }
-    return chartData;
-  }, [chartData, mode, runningAgentIds, initialEquity]);
+    return chartDataGross;
+  }, [chartDataAdjusted, chartDataGross, mode, runningAgentIds]);
 
   // Calculate last index and value per model for end dot rendering
   const lastIdxById = useMemo(() => {
