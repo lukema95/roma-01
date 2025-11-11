@@ -6,27 +6,40 @@ import { MultiAgentChart } from "@/components/MultiAgentChart";
 import { RightSideTabs } from "@/components/RightSideTabs";
 import useSWR from "swr";
 import { api } from "@/lib/api";
-import { getAllModels } from "@/lib/model/meta";
+import type { Agent } from "@/types";
 
 export default function HomePage() {
   // Fetch running agents from API
   const { data: runningAgents, error } = useSWR("/agents", api.getAgents, {
     refreshInterval: 10000,
+    revalidateOnFocus: false, // Don't revalidate on window focus
+    revalidateOnReconnect: true, // Revalidate when network reconnects
   });
 
-  // Get all defined models and merge with running agents
-  const agents = useMemo(() => {
-    const allModels = getAllModels();
-    const runningMap = new Map((runningAgents || []).map(a => [a.id, a]));
-    
-    return allModels.map(model => {
-      const runningAgent = runningMap.get(model.id);
+  // Use agents directly from API, no need to merge with predefined models
+  const agents = useMemo<Agent[]>(() => {
+    return (runningAgents || []).map((a): Agent => {
+      const dexTypeRaw = (a.dex_type || "").toLowerCase();
+      const dexTypeNorm: Agent["dex_type"] =
+        dexTypeRaw === "hyperliquid"
+          ? "hyperliquid"
+          : dexTypeRaw === "aster"
+          ? "aster"
+          : undefined;
+
       return {
-        id: model.id,
-        name: model.name,
-        is_running: runningAgent?.is_running || false,
-        cycle_count: runningAgent?.cycle_count || 0,
-        runtime_minutes: runningAgent?.runtime_minutes || 0,
+        id: a.id,
+        name: a.name || a.id,
+        is_running: a.is_running || false,
+        cycle_count: a.cycle_count || 0,
+        runtime_minutes: a.runtime_minutes || 0,
+        // Multi-DEX fields from API
+        dex_type: dexTypeNorm,
+        account_id: a.account_id,
+        model_id: a.model_id,
+        model_config_id: a.model_config_id,
+        model_provider: a.model_provider,
+        llm_model: a.llm_model,
       };
     });
   }, [runningAgents]);

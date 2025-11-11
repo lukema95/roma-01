@@ -1,23 +1,44 @@
 # ROMA-01 Trading Configuration Guide
 
-This directory contains configuration files for the ROMA-01 trading platform, including model-specific settings and global trading parameters.
+**语言选择 / Language:** [English](README.md) · [中文](README.zh-CN.md)
+
+This directory contains configuration files for the ROMA-01 trading platform.
+
+## ⚠️ Configuration Update
+
+**The platform now uses Account-Centric Configuration** - all configuration is in `trading_config.yaml`.
+
+See **[README_CONFIG.md](README_CONFIG.md)** for the new configuration guide.
+
+## Quick Start
+
+1. Edit `trading_config.yaml` and fill in your accounts/models/agents
+2. Set environment variables in `.env` file
+3. Start the platform
+
+See **[QUICK_START.md](QUICK_START.md)** for step-by-step instructions.
 
 ## Directory Structure
 
 ```
 config/
-├── README.md                           # This file
-├── trading_config.yaml                 # Global system configuration
-└── models/                             # Model-specific configurations
-    ├── deepseek-chat-v3.1.yaml
-    ├── claude-sonnet-4.5.yaml
-    ├── qwen3-max.yaml
-    ├── grok-4.yaml
-    ├── gemini-2.5-pro.yaml
-    └── gpt-5.yaml
+├── README.md                           # This file (legacy documentation)
+├── README_CONFIG.md                    # New configuration guide (RECOMMENDED)
+├── QUICK_START.md                      # Quick start guide
+└── trading_config.yaml                 # Main configuration file (all-in-one)
 ```
 
-## Global Configuration (`trading_config.yaml`)
+## ⚠️ Legacy Documentation
+
+The content below describes the **old configuration format**. 
+
+**For new setups, use the Account-Centric Configuration** - see `README_CONFIG.md`.
+
+---
+
+## Legacy: Global Configuration (`trading_config.yaml`)
+
+> **Note:** This section describes the old format. The new format uses accounts/models/agents segments.
 
 This file controls system-wide settings that apply to all trading agents.
 
@@ -28,13 +49,22 @@ This file controls system-wide settings that apply to all trading agents.
 | `system.scan_interval_minutes` | Integer | How often each agent scans the market and makes decisions (in minutes) | 3 |
 | `system.max_concurrent_agents` | Integer | Maximum number of agents that can run simultaneously | 6 |
 | `system.log_level` | String | Logging level (DEBUG, INFO, WARNING, ERROR) | INFO |
+| `system.prompt_language` | String | Default language for system prompts (`en` or `zh`) | en |
+
+### Authentication Settings
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `auth.admin.username` | String | Default administrator username used for Settings portal login | admin |
+| `auth.admin.password_hash` | String | PBKDF2-SHA256 hash of the administrator password | Hash for `admin123` |
+| `auth.admin.updated_at` | String | ISO timestamp when the password was last updated | 2025-11-10T00:00:00Z |
 
 ### API Settings
 
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
 | `api.host` | String | API server host address | 0.0.0.0 |
-| `api.port` | Integer | API server port | 8000 |
+| `api.port` | Integer | API server port | 8080 |
 
 ### Agent Configuration
 

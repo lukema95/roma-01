@@ -17,7 +17,7 @@ Endpoints:
 
 import asyncio
 from typing import Optional
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
@@ -29,6 +29,7 @@ from roma_trading.config import get_settings
 from roma_trading.agents import AgentManager
 from roma_trading.core.analytics import TradingAnalytics
 from roma_trading.core.chat_service import initialize_chat_service, get_chat_service
+from roma_trading.api.routes import config as config_routes
 
 
 # Global agent manager
@@ -76,6 +77,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Register routers
+app.include_router(config_routes.router)
+config_routes.set_agent_manager(agent_manager)
+
 
 @app.get("/")
 async def root():
@@ -114,7 +119,11 @@ async def get_account(agent_id: str):
     """Get agent's account balance."""
     try:
         agent = agent_manager.get_agent(agent_id)
-        return await agent.dex.get_account_balance()
+        snapshot = agent.get_account_snapshot()
+        if snapshot:
+            return snapshot
+        account = await agent.dex.get_account_balance()
+        return agent.logger_module.augment_account_balance(account)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -350,7 +359,10 @@ class ChatMessage(BaseModel):
 
 
 @app.get("/api/agents/{agent_id}/prompts")
-async def get_custom_prompts(agent_id: str):
+async def get_custom_prompts(
+    agent_id: str,
+    _: dict = Depends(config_routes.get_current_admin_token),
+):
     """
     Get agent's custom prompt configuration
     
@@ -384,8 +396,34 @@ async def get_custom_prompts(agent_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/agents/{agent_id}/prompts/system")
+async def get_system_prompt(agent_id: str, language: Optional[str] = Query(None)):
+    """
+    Get core system prompt without custom sections. Publicly accessible.
+    """
+    try:
+        agent = agent_manager.get_agent(agent_id)
+        system_prompt = agent._build_system_prompt(language=language, include_custom=False)
+        return {
+            "status": "success",
+            "data": {
+                "system_prompt": system_prompt,
+                "length": len(system_prompt),
+            },
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to build system prompt: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/agents/{agent_id}/prompts/preview")
-async def get_full_prompt_preview(agent_id: str):
+async def get_full_prompt_preview(
+    agent_id: str,
+    language: Optional[str] = Query(None),
+    _: dict = Depends(config_routes.get_current_admin_token),
+):
     """
     Get the complete system prompt that will be sent to AI
     
@@ -399,7 +437,7 @@ async def get_full_prompt_preview(agent_id: str):
         agent = agent_manager.get_agent(agent_id)
         
         # Build the actual system prompt using agent's method
-        full_prompt = agent._build_system_prompt()
+        full_prompt = agent._build_system_prompt(language=language, include_custom=True)
         
         return {
             "status": "success",
@@ -445,11 +483,16 @@ async def chat_with_ai(chat_request: ChatMessage):
 
 
 @app.put("/api/agents/{agent_id}/prompts")
-async def update_custom_prompts(agent_id: str, prompts: CustomPromptUpdate):
+async def update_custom_prompts(
+    agent_id: str,
+    prompts: CustomPromptUpdate,
+    _: dict = Depends(config_routes.get_current_admin_token),
+):
     """
     Update agent's custom prompts
     
-    Configuration is saved to YAML file immediately and takes effect in next trading cycle
+    For account-centric configuration: Updates in-memory config (takes effect immediately)
+    For legacy configuration: Updates both in-memory and config file
     
     Args:
         agent_id: Agent identifier
@@ -462,51 +505,56 @@ async def update_custom_prompts(agent_id: str, prompts: CustomPromptUpdate):
         # Get agent
         agent = agent_manager.get_agent(agent_id)
         
-        # Find config file path using Path for better cross-platform support
-        from pathlib import Path
+        # Ensure custom_prompts section exists in agent config
+        if "strategy" not in agent.config:
+            agent.config["strategy"] = {}
+        if "custom_prompts" not in agent.config["strategy"]:
+            agent.config["strategy"]["custom_prompts"] = {}
         
-        # Try relative path first (when running from backend/)
-        config_path = Path("config/models") / f"{agent_id}.yaml"
-        
-        if not config_path.exists():
-            # Try from project root
-            config_path = Path("backend/config/models") / f"{agent_id}.yaml"
-        
-        if not config_path.exists():
-            logger.error(f"Config file not found for agent {agent_id} at {config_path}")
-            raise HTTPException(
-                status_code=404, 
-                detail=f"Config file not found: {agent_id}.yaml"
-            )
-        
-        logger.debug(f"Using config file: {config_path.absolute()}")
-        
-        # Read current configuration
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = yaml.safe_load(f)
-        
-        # Ensure custom_prompts section exists
-        if "custom_prompts" not in config["strategy"]:
-            config["strategy"]["custom_prompts"] = {}
-        
-        # Update fields
+        # Update fields in memory configuration
         for field, value in prompts.dict(exclude_unset=True).items():
             if value is not None:
-                config["strategy"]["custom_prompts"][field] = value
+                agent.config["strategy"]["custom_prompts"][field] = value
         
-        # Save configuration to file
-        with open(config_path, "w", encoding="utf-8") as f:
-            yaml.dump(config, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+        # Try to save to file for legacy mode (if config file exists)
+        # For account-centric mode, we only update in-memory config
+        # Users can manually update trading_config.yaml if they want persistence
+        from pathlib import Path
         
-        # Update in-memory configuration (takes effect immediately)
-        agent.config["strategy"]["custom_prompts"] = config["strategy"]["custom_prompts"]
+        # Try to find legacy config file
+        config_path = Path("config/models") / f"{agent_id}.yaml"
+        if not config_path.exists():
+            config_path = Path("backend/config/models") / f"{agent_id}.yaml"
         
-        logger.info(f"Updated custom prompts for agent {agent_id}")
+        if config_path.exists():
+            # Legacy mode: update config file
+            logger.debug(f"Updating legacy config file: {config_path.absolute()}")
+            with open(config_path, "r", encoding="utf-8") as f:
+                file_config = yaml.safe_load(f)
+            
+            if "strategy" not in file_config:
+                file_config["strategy"] = {}
+            if "custom_prompts" not in file_config["strategy"]:
+                file_config["strategy"]["custom_prompts"] = {}
+            
+            # Sync with in-memory config
+            file_config["strategy"]["custom_prompts"] = agent.config["strategy"]["custom_prompts"]
+            
+            with open(config_path, "w", encoding="utf-8") as f:
+                yaml.dump(file_config, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+            
+            logger.info(f"Updated custom prompts for agent {agent_id} (legacy mode - saved to file)")
+        else:
+            # Account-centric mode: only update in-memory
+            logger.info(
+                f"Updated custom prompts for agent {agent_id} (account-centric mode - in-memory only). "
+                f"Update trading_config.yaml manually if you want persistence."
+            )
         
         return {
             "status": "success",
             "message": f"Custom prompts updated for agent {agent_id}. Will take effect in next trading cycle.",
-            "data": config["strategy"]["custom_prompts"]
+            "data": agent.config["strategy"]["custom_prompts"]
         }
     
     except ValueError as e:

@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
+import Link from "next/link";
 import useSWR from "swr";
 import { api } from "@/lib/api";
 import type { Agent, Position } from "@/types";
 import { fmtUSD, fmtPercent } from "@/lib/utils/formatters";
-import { getModelColor, getModelName } from "@/lib/model/meta";
+import { getAgentModelColor, getAgentModelName } from "@/lib/model/meta";
 import { getCoinIcon } from "@/lib/utils/coinIcons";
-import PromptEditor from "./PromptEditor";
 import { useLanguage } from "@/store/useLanguage";
 import { getTranslation } from "@/lib/i18n";
 
@@ -23,6 +23,25 @@ export function RightSideTabs({ agents }: RightSideTabsProps) {
   
   const [activeTab, setActiveTab] = useState<TabType>("positions");
   const [filterAgent, setFilterAgent] = useState<string>("all");
+  const [filterDex, setFilterDex] = useState<string>("all");
+  const [filterAccount, setFilterAccount] = useState<string>("all");
+  
+  // Get unique DEX types and account IDs from agents
+  const dexTypes = useMemo(() => {
+    const types = new Set<string>();
+    agents.forEach(a => {
+      if (a.dex_type) types.add(a.dex_type);
+    });
+    return Array.from(types).sort();
+  }, [agents]);
+  
+  const accountIds = useMemo(() => {
+    const accounts = new Set<string>();
+    agents.forEach(a => {
+      if (a.account_id) accounts.add(a.account_id);
+    });
+    return Array.from(accounts).sort();
+  }, [agents]);
 
   return (
     <div
@@ -58,32 +77,93 @@ export function RightSideTabs({ agents }: RightSideTabsProps) {
         </div>
       </div>
 
-      {/* Filter - Only show for non-prompts and non-chat tabs */}
+      {/* Filters - Only show for non-prompts and non-chat tabs */}
       {activeTab !== "prompts" && activeTab !== "chat" && (
-        <div className="mb-3">
-          <label
-            className="text-xs mb-1 block tracking-wider"
-            style={{ color: "var(--muted-text)" }}
-          >
-            {t.filter}
-          </label>
-          <select
-            value={filterAgent}
-            onChange={(e) => setFilterAgent(e.target.value)}
-            className="w-full px-2 py-1.5 rounded border text-xs chip-btn"
-            style={{
-              background: "var(--panel-bg)",
-              borderColor: "var(--chip-border)",
-              color: "var(--foreground)",
-            }}
-          >
-            <option value="all">{t.allAgents}</option>
-            {agents.map((agent) => (
-              <option key={agent.id} value={agent.id}>
-                {agent.name}
-              </option>
-            ))}
-          </select>
+        <div className="mb-3 space-y-2">
+          {/* DEX Filter */}
+          {dexTypes.length > 1 && (
+            <div>
+              <label
+                className="text-xs mb-1 block tracking-wider"
+                style={{ color: "var(--muted-text)" }}
+              >
+                {t.filterDex}
+              </label>
+              <select
+                value={filterDex}
+                onChange={(e) => setFilterDex(e.target.value)}
+                className="w-full px-2 py-1.5 rounded border text-xs chip-btn"
+                style={{
+                  background: "var(--panel-bg)",
+                  borderColor: "var(--chip-border)",
+                  color: "var(--foreground)",
+                }}
+              >
+                <option value="all">{t.allDex}</option>
+                {dexTypes.map((dex) => (
+                  <option key={dex} value={dex}>
+                    {dex === "aster" ? t.aster : dex === "hyperliquid" ? t.hyperliquid : dex}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          
+          {/* Account Filter */}
+          {accountIds.length > 1 && (
+            <div>
+              <label
+                className="text-xs mb-1 block tracking-wider"
+                style={{ color: "var(--muted-text)" }}
+              >
+                {t.filterAccount}
+              </label>
+              <select
+                value={filterAccount}
+                onChange={(e) => setFilterAccount(e.target.value)}
+                className="w-full px-2 py-1.5 rounded border text-xs chip-btn"
+                style={{
+                  background: "var(--panel-bg)",
+                  borderColor: "var(--chip-border)",
+                  color: "var(--foreground)",
+                }}
+              >
+                <option value="all">{t.allAccounts}</option>
+                {accountIds.map((accountId) => (
+                  <option key={accountId} value={accountId}>
+                    {accountId}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          
+          {/* Agent Filter */}
+          <div>
+            <label
+              className="text-xs mb-1 block tracking-wider"
+              style={{ color: "var(--muted-text)" }}
+            >
+              {t.filter}
+            </label>
+            <select
+              value={filterAgent}
+              onChange={(e) => setFilterAgent(e.target.value)}
+              className="w-full px-2 py-1.5 rounded border text-xs chip-btn"
+              style={{
+                background: "var(--panel-bg)",
+                borderColor: "var(--chip-border)",
+                color: "var(--foreground)",
+              }}
+            >
+              <option value="all">{t.allAgents}</option>
+              {agents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       )}
 
@@ -118,11 +198,11 @@ export function RightSideTabs({ agents }: RightSideTabsProps) {
           {/* Content */}
           <div className="flex-1 overflow-y-auto">
             {activeTab === "positions" ? (
-              <PositionsContent agents={agents} filterAgent={filterAgent} />
+              <PositionsContent agents={agents} filterAgent={filterAgent} filterDex={filterDex} filterAccount={filterAccount} />
             ) : activeTab === "trades" ? (
-              <TradesContent agents={agents} filterAgent={filterAgent} />
+              <TradesContent agents={agents} filterAgent={filterAgent} filterDex={filterDex} filterAccount={filterAccount} />
             ) : activeTab === "decisions" ? (
-              <DecisionsContent agents={agents} filterAgent={filterAgent} />
+              <DecisionsContent agents={agents} filterAgent={filterAgent} filterDex={filterDex} filterAccount={filterAccount} />
             ) : activeTab === "prompts" ? (
               <PromptsContent agents={agents} filterAgent={filterAgent} />
             ) : (
@@ -136,22 +216,72 @@ export function RightSideTabs({ agents }: RightSideTabsProps) {
 function PositionsContent({
   agents,
   filterAgent,
+  filterDex,
+  filterAccount,
 }: {
   agents: Agent[];
   filterAgent: string;
+  filterDex: string;
+  filterAccount: string;
 }) {
   // Only show running agents
   const runningAgents = agents.filter(a => a.is_running);
-  const filteredAgents =
-    filterAgent === "all" ? runningAgents : runningAgents.filter((a) => a.id === filterAgent);
+  
+  // Apply filters
+  let filteredAgents = runningAgents;
+  
+  // Filter by DEX
+  if (filterDex !== "all") {
+    filteredAgents = filteredAgents.filter(a => a.dex_type === filterDex);
+  }
+  
+  // Filter by account
+  if (filterAccount !== "all") {
+    filteredAgents = filteredAgents.filter(a => a.account_id === filterAccount);
+  }
+  
+  // Filter by agent
+  if (filterAgent !== "all") {
+    filteredAgents = filteredAgents.filter((a) => a.id === filterAgent);
+  }
 
   // Fetch positions for filtered agents
-  const positionsData = filteredAgents.map((agent) => {
-    const { data } = useSWR(`/agent/${agent.id}/positions`, () =>
-      api.getPositions(agent.id), { refreshInterval: 10000 }
-    );
-    return { agent, positions: data || [] };
-  });
+  const visibleAgentKey = useMemo(
+    () =>
+      filteredAgents
+        .map((agent) => agent.id)
+        .sort()
+        .join(","),
+    [filteredAgents],
+  );
+
+  const { data: positionsMap } = useSWR(
+    visibleAgentKey ? ["agent-positions", visibleAgentKey] : null,
+    async ([, key]) => {
+      const ids = key.split(",").filter(Boolean);
+      if (ids.length === 0) {
+        return new Map<string, Position[]>();
+      }
+      const results = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const positions = await api.getPositions(id);
+            return [id, positions ?? []] as [string, Position[]];
+          } catch (error) {
+            console.error(`Failed to fetch positions for ${id}:`, error);
+            return [id, []] as [string, Position[]];
+          }
+        }),
+      );
+      return new Map(results);
+    },
+    { refreshInterval: 10000 },
+  );
+
+  const positionsData = filteredAgents.map((agent) => ({
+    agent,
+    positions: positionsMap?.get(agent.id) ?? [],
+  }));
 
   // Calculate total positions
   const totalPositions = positionsData.reduce((sum, d) => sum + d.positions.length, 0);
@@ -180,7 +310,7 @@ function PositionsContent({
         const totalPnL = positions.reduce((sum, p) => sum + (p.unrealized_profit || 0), 0);
         
         // Get model color
-        const color = getModelColor(agent.id);
+        const color = getAgentModelColor(agent);
         const brandBg = `linear-gradient(0deg, ${color}10, var(--panel-bg))`;
         const brandBorder = `${color}55`;
 
@@ -200,7 +330,7 @@ function PositionsContent({
                   className="text-xs font-semibold uppercase tracking-wider" 
                   style={{ color: "var(--foreground)" }}
                 >
-                  {getModelName(agent.id)}
+                  {getAgentModelName(agent) || agent.name || agent.id}
                 </span>
                 <span 
                   className="text-[10px] px-1.5 py-0.5 rounded" 
@@ -305,14 +435,34 @@ function PositionsContent({
 function TradesContent({
   agents,
   filterAgent,
+  filterDex,
+  filterAccount,
 }: {
   agents: Agent[];
   filterAgent: string;
+  filterDex: string;
+  filterAccount: string;
 }) {
   // Only show running agents
   const runningAgents = agents.filter(a => a.is_running);
-  const filteredAgents =
-    filterAgent === "all" ? runningAgents : runningAgents.filter((a) => a.id === filterAgent);
+  
+  // Apply filters
+  let filteredAgents = runningAgents;
+  
+  // Filter by DEX
+  if (filterDex !== "all") {
+    filteredAgents = filteredAgents.filter(a => a.dex_type === filterDex);
+  }
+  
+  // Filter by account
+  if (filterAccount !== "all") {
+    filteredAgents = filteredAgents.filter(a => a.account_id === filterAccount);
+  }
+  
+  // Filter by agent
+  if (filterAgent !== "all") {
+    filteredAgents = filteredAgents.filter((a) => a.id === filterAgent);
+  }
 
   // Fetch trades for filtered agents
   const tradesDataQueries = filteredAgents.map((agent) => {
@@ -451,16 +601,36 @@ function TradesContent({
 function DecisionsContent({
   agents,
   filterAgent,
+  filterDex,
+  filterAccount,
 }: {
   agents: Agent[];
   filterAgent: string;
+  filterDex: string;
+  filterAccount: string;
 }) {
   const [expandedDecisions, setExpandedDecisions] = useState<Set<string>>(new Set());
 
   // Only show running agents
   const runningAgents = agents.filter(a => a.is_running);
-  const filteredAgents =
-    filterAgent === "all" ? runningAgents : runningAgents.filter((a) => a.id === filterAgent);
+  
+  // Apply filters
+  let filteredAgents = runningAgents;
+  
+  // Filter by DEX
+  if (filterDex !== "all") {
+    filteredAgents = filteredAgents.filter(a => a.dex_type === filterDex);
+  }
+  
+  // Filter by account
+  if (filterAccount !== "all") {
+    filteredAgents = filteredAgents.filter(a => a.account_id === filterAccount);
+  }
+  
+  // Filter by agent
+  if (filterAgent !== "all") {
+    filteredAgents = filteredAgents.filter((a) => a.id === filterAgent);
+  }
 
   // Fetch decisions for filtered agents
   const decisionsDataQueries = filteredAgents.map((agent) => {
@@ -510,7 +680,8 @@ function DecisionsContent({
         {allDecisions.length} Decision{allDecisions.length > 1 ? "s" : ""}
       </p>
       {allDecisions.slice(0, 15).map((decision: any, index: number) => {
-        const color = getModelColor(decision.agentId);
+        const agentMeta = filteredAgents.find(a => a.id === decision.agentId);
+        const color = getAgentModelColor(agentMeta);
         const brandBg = `linear-gradient(0deg, ${color}10, var(--panel-bg))`;
         const brandBorder = `${color}55`;
         const decisionKey = `${decision.agentId}-${decision.cycle_number}`;
@@ -682,6 +853,14 @@ function PromptsContent({
     ? filterAgent 
     : agents.find(a => a.is_running)?.id;
 
+  const { data: systemPrompt, isLoading, error } = useSWR(
+    selectedAgentId ? ["system-prompt-preview", selectedAgentId, language] : null,
+    ([, agentId, lang]) => api.getSystemPromptPreview(agentId, lang),
+    {
+      revalidateOnFocus: false,
+    }
+  );
+
   if (!selectedAgentId) {
     return (
       <div className="flex items-center justify-center h-full" style={{ color: "var(--muted-text)" }}>
@@ -693,7 +872,57 @@ function PromptsContent({
     );
   }
 
-  return <PromptEditor agentId={selectedAgentId} />;
+  return (
+    <div className="flex h-full flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--foreground)" }}>
+            {language === "zh" ? "提示词" : "Prompts"}
+          </div>
+          <div className="text-[10px]" style={{ color: "var(--muted-text)" }}>
+            {language === "zh"
+              ? "提示词编辑已迁移至 Settings 页面，以下为只读预览。"
+              : "Prompt editing has moved to Settings. Preview below is read-only."}
+          </div>
+        </div>
+        <Link
+          href="/settings"
+          className="text-[10px] uppercase tracking-widest font-semibold px-3 py-1 rounded border transition-all hover:opacity-80"
+          style={{
+            borderColor: "var(--panel-border)",
+            color: "var(--brand-accent)",
+          }}
+        >
+          {language === "zh" ? "前往设置" : "Open Settings"}
+        </Link>
+      </div>
+
+      <div
+        className="flex-1 overflow-y-auto rounded border p-3"
+        style={{
+          borderColor: "var(--panel-border)",
+          background: "var(--panel-bg)",
+          color: "var(--muted-text)",
+        }}
+      >
+        {isLoading && (
+          <div className="text-[11px]" style={{ color: "var(--muted-text)" }}>
+            {language === "zh" ? "加载提示词..." : "Loading prompt..."}
+          </div>
+        )}
+        {error && (
+          <div className="text-[11px] text-red-500">
+            {language === "zh" ? "加载提示词失败" : "Failed to load prompt preview"}
+          </div>
+        )}
+        {!isLoading && !error && (
+          <pre className="text-[11px] leading-relaxed whitespace-pre-wrap font-mono">
+            {systemPrompt || (language === "zh" ? "暂无提示词预览" : "No prompt preview available")}
+          </pre>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function ChatContent() {

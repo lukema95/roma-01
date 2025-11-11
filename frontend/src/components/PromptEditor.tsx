@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react";
 import { useLanguage } from "@/store/useLanguage";
 import { getTranslation } from "@/lib/i18n";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { api } from "@/lib/api";
 
 interface CustomPrompts {
   enabled: boolean;
@@ -42,11 +41,8 @@ export default function PromptEditor({ agentId }: { agentId: string }) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE}/api/agents/${agentId}/prompts`);
-      const data = await response.json();
-      if (data.status === "success") {
-        setPrompts(data.data);
-      }
+      const data = await api.getCustomPrompts(agentId);
+      setPrompts(data);
     } catch (err) {
       console.error("Failed to load prompts:", err);
       setError("Failed to load prompts");
@@ -61,20 +57,9 @@ export default function PromptEditor({ agentId }: { agentId: string }) {
     setError(null);
     
     try {
-      const response = await fetch(`${API_BASE}/api/agents/${agentId}/prompts`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(prompts),
-      });
-      
-      const data = await response.json();
-      
-      if (data.status === "success") {
+      await api.updateCustomPrompts(agentId, prompts);
         setSaved(true);
         setTimeout(() => setSaved(false), 3000);
-      } else {
-        setError(data.message || "Failed to save prompts");
-      }
     } catch (err) {
       console.error("Failed to save prompts:", err);
       setError("Failed to save prompts");
@@ -102,21 +87,10 @@ export default function PromptEditor({ agentId }: { agentId: string }) {
         additional_rules: "",
       };
 
-      const response = await fetch(`${API_BASE}/api/agents/${agentId}/prompts`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(emptyPrompts),
-      });
-      
-      const data = await response.json();
-      
-      if (data.status === "success") {
+      await api.updateCustomPrompts(agentId, emptyPrompts);
         setPrompts(emptyPrompts);
         setSaved(true);
         setTimeout(() => setSaved(false), 3000);
-      } else {
-        setError(data.message || "Failed to clear prompts");
-      }
     } catch (err) {
       console.error("Failed to clear prompts:", err);
       setError("Failed to clear prompts");
@@ -132,14 +106,8 @@ export default function PromptEditor({ agentId }: { agentId: string }) {
     setLoadingPreview(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE}/api/agents/${agentId}/prompts/preview`);
-      const data = await response.json();
-      if (data.status === "success") {
-        setFullPrompt(data.data.full_prompt);
-      } else {
-        setFullPrompt("Failed to load preview");
-        setError("Failed to load preview");
-      }
+      const preview = await api.getFullPromptPreview(agentId, language);
+      setFullPrompt(preview);
     } catch (err) {
       console.error("Failed to load prompt preview:", err);
       setFullPrompt("Failed to load preview");
@@ -155,6 +123,13 @@ export default function PromptEditor({ agentId }: { agentId: string }) {
     }
     setShowPreview(!showPreview);
   };
+
+  useEffect(() => {
+    if (showPreview) {
+      loadFullPromptPreview();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language]);
 
   if (loading) {
     return (

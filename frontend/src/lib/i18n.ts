@@ -8,8 +8,10 @@ export const translations = {
     header: {
       live: "Live",
       leaderboard: "Leaderboard",
-      models: "Models",
+      models: "Models", // Keep for backward compatibility
+      agents: "Agents",
       about: "About",
+      settings: "Settings",
       running: "RUNNING",
     },
     
@@ -25,6 +27,13 @@ export const translations = {
       overallStats: "OVERALL STATS",
       advancedAnalytics: "ADVANCED ANALYTICS",
       accountValue: "ACCOUNT VALUE",
+      winningModel: "WINNING MODEL",
+      totalEquity: "TOTAL EQUITY",
+      netDeposits: "Net Deposits",
+      adjustedEquity: "Deposit-Adjusted Equity",
+      activePositions: "ACTIVE POSITIONS",
+      noActivePositions: "No active positions",
+      noData: "No data",
       noRunningAgents: "No running agents",
       startAgent: "Start an agent to see leaderboard",
       rank: "RANK",
@@ -68,6 +77,20 @@ export const translations = {
       noPositions: "No open positions",
       noTrades: "No completed trades yet",
       noDecisions: "No decisions yet",
+      // Multi-DEX filters
+      filterDex: "DEX:",
+      filterAccount: "ACCOUNT:",
+      allDex: "ALL DEX",
+      allAccounts: "ALL ACCOUNTS",
+      aster: "Aster",
+      hyperliquid: "Hyperliquid",
+    },
+    
+    // Chart strings
+    charts: {
+      accountValue: "Account Value",
+      noEquityData: "No equity data available yet",
+      tradingNotStarted: "Data will appear after trading starts",
     },
     
     // Positions
@@ -304,8 +327,10 @@ Long-short balance:
     header: {
       live: "实时",
       leaderboard: "排行榜",
-      models: "模型",
+      models: "模型", // Keep for backward compatibility
+      agents: "智能体",
       about: "关于",
+      settings: "设置",
       running: "运行中",
     },
     
@@ -321,6 +346,13 @@ Long-short balance:
       overallStats: "总体统计",
       advancedAnalytics: "高级分析",
       accountValue: "账户价值",
+      winningModel: "最佳模型",
+      totalEquity: "总账户权益",
+      netDeposits: "净充值",
+      adjustedEquity: "调整后账户权益",
+      activePositions: "当前持仓",
+      noActivePositions: "暂无持仓",
+      noData: "暂无数据",
       noRunningAgents: "无运行中的智能体",
       startAgent: "启动智能体以查看排行榜",
       rank: "排名",
@@ -364,6 +396,20 @@ Long-short balance:
       noPositions: "暂无持仓",
       noTrades: "暂无已完成交易",
       noDecisions: "暂无决策记录",
+      // Multi-DEX filters
+      filterDex: "DEX：",
+      filterAccount: "账户：",
+      allDex: "所有 DEX",
+      allAccounts: "所有账户",
+      aster: "Aster",
+      hyperliquid: "Hyperliquid",
+    },
+    
+    // Chart strings
+    charts: {
+      accountValue: "账户权益",
+      noEquityData: "暂无账户权益数据",
+      tradingNotStarted: "交易开始后将显示数据",
     },
     
     // Positions

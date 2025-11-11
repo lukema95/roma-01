@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/api";
-import { getModelName, getModelColor } from "@/lib/model/meta";
+import { getAgentModelColor } from "@/lib/model/meta";
 import { fmtUSD } from "@/lib/utils/formatters";
 import Link from "next/link";
 import { useLanguage } from "@/store/useLanguage";
@@ -68,7 +68,7 @@ function LeaderboardRow({
     { refreshInterval: 60000 }
   );
 
-  const color = getModelColor(agent.id);
+  const color = getAgentModelColor(agent);
   
   // If not running, show gray row
   if (!isRunning) {
@@ -87,7 +87,7 @@ function LeaderboardRow({
               className="w-2.5 h-2.5 rounded-full"
               style={{ background: "#6b7280" }}
             />
-            <span className="font-semibold">{getModelName(agent.id)}</span>
+            <span className="font-semibold">{agent.name || agent.id}</span>
           </div>
         </td>
         <td className="py-1.5 pr-2 tabular-nums" colSpan={mode === "advanced" ? 11 : 8} style={{ color: "var(--muted-text)" }}>
@@ -108,10 +108,14 @@ function LeaderboardRow({
     );
   }
 
-  // Use first equity history point as initial balance, fallback to 10000 if no history
-  const initialBalance = equityHistory.length > 0 ? equityHistory[0].equity : 10000;
-  const equity = account.total_wallet_balance;
-  const totalPnl = equity - initialBalance;
+  const equityAdjusted = account.adjusted_total_balance ?? account.total_wallet_balance ?? 0;
+  // Use first equity history point as initial balance, fallback to adjusted equity or 10000
+  const initialPoint = equityHistory.length > 0 ? equityHistory[0] : null;
+  const initialBalance = initialPoint
+    ? initialPoint.adjusted_equity ?? initialPoint.equity
+    : equityAdjusted || 10000;
+  const equityDisplay = account.gross_total_balance ?? account.total_wallet_balance ?? equityAdjusted;
+  const totalPnl = equityAdjusted - initialBalance;
   const returnPct = initialBalance > 0 ? (totalPnl / initialBalance) * 100 : 0;
   const sharpe = returnPct > 0 ? returnPct / 100 : returnPct / 50;
 
@@ -138,7 +142,7 @@ function LeaderboardRow({
             className="w-2.5 h-2.5 rounded-full"
             style={{ background: color }}
           />
-          <span className="font-semibold">{getModelName(agent.id)}</span>
+          <span className="font-semibold">{agent.name || agent.id}</span>
           {isRunning && (
             <span 
               className="text-[9px] px-1.5 py-0.5 rounded font-semibold"
@@ -153,7 +157,7 @@ function LeaderboardRow({
         </Link>
       </td>
       <td className="py-1.5 pr-2 tabular-nums font-semibold" style={{ color: "var(--brand-accent)" }}>
-        {fmtUSD(equity)}
+        {fmtUSD(equityDisplay)}
       </td>
       {mode === "advanced" ? (
         <>

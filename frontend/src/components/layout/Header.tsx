@@ -7,7 +7,7 @@ import { getTranslation } from "@/lib/i18n";
 import { useState, useEffect, useRef } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/api";
-import { getModelName, getModelColor } from "@/lib/model/meta";
+import { getAgentModelColor } from "@/lib/model/meta";
 
 export function Header() {
   const theme = useTheme((s) => s.theme);
@@ -88,7 +88,7 @@ export function Header() {
               className="font-semibold hover:opacity-70 transition-opacity flex items-center gap-1 uppercase tracking-wider"
               style={{ color: "inherit" }}
             >
-              {t.header.models}
+              {t.header.agents}
               <svg 
                 className={`w-3 h-3 transition-transform ${agentsOpen ? "rotate-180" : ""}`}
                 fill="none" 
@@ -112,7 +112,7 @@ export function Header() {
               >
                 <div className="py-1">
                   {agents.map((agent) => {
-                    const color = getModelColor(agent.id);
+                    const color = getAgentModelColor(agent);
                     return (
                       <Link
                         key={agent.id}
@@ -136,7 +136,7 @@ export function Header() {
                               style={{ background: color }}
                             />
                             <span className="text-xs font-medium">
-                              {getModelName(agent.id)}
+                              {agent.name || agent.id}
                             </span>
                           </div>
                           {agent.is_running && (
@@ -158,6 +158,11 @@ export function Header() {
               </div>
             )}
           </div>
+          
+          {/* Settings Link */}
+          <Link href="/settings" className="font-semibold hover:opacity-70 transition-opacity uppercase tracking-wider" style={{ color: "inherit" }}>
+            {t.header.settings}
+          </Link>
 
           {/* About Link */}
           <Link href="/about" className="font-semibold hover:opacity-70 transition-opacity uppercase tracking-wider" style={{ color: "inherit" }}>

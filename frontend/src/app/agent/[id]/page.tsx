@@ -1,17 +1,30 @@
 "use client";
 
 import { useParams } from "next/navigation";
+import useSWR from "swr";
 import AgentStatsSummary from "@/components/agent/AgentStatsSummary";
 import AgentPositionsTable from "@/components/agent/AgentPositionsTable";
 import AgentTradesTable from "@/components/agent/AgentTradesTable";
 import AgentDecisionsHistory from "@/components/agent/AgentDecisionsHistory";
-import { getModelName, getModelColor } from "@/lib/model/meta";
+import { getAgentModelColor } from "@/lib/model/meta";
+import { api } from "@/lib/api";
 
 export default function AgentDetailPage() {
   const params = useParams();
   const id = params.id as string;
 
-  const color = getModelColor(id);
+  // Fetch agent info to get real name
+  const { data: agentInfo } = useSWR(`/agent/${id}`, () => api.getAgentInfo(id), {
+    refreshInterval: 10000,
+  });
+
+  const agentName = agentInfo?.name || id;
+  const color = getAgentModelColor({
+    model_id: agentInfo?.model_id,
+    model_config_id: agentInfo?.model_config_id,
+    llm_model: agentInfo?.llm_model,
+    id,
+  });
 
   return (
     <div 
@@ -36,7 +49,7 @@ export default function AgentDetailPage() {
               className="text-xl font-bold uppercase tracking-wide terminal-text"
               style={{ color: "var(--foreground)" }}
             >
-              {getModelName(id)}
+              {agentName}
             </h1>
           </div>
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import useSWR from "swr";
 import {
   LineChart,
@@ -14,9 +14,11 @@ import {
 } from "recharts";
 import { format } from "date-fns";
 import { api } from "@/lib/api";
-import { getModelColor, getModelName, getModelIcon, getAllModels } from "@/lib/model/meta";
+import { getAgentModelColor, getAgentModelIcon } from "@/lib/model/meta";
 import { adjustLuminance } from "@/lib/utils/color";
 import type { Agent, EquityPoint } from "@/types";
+import { useLanguage } from "@/store/useLanguage";
+import { getTranslation } from "@/lib/i18n";
 
 interface AccountValueChartProps {
   agents: Agent[];
@@ -31,6 +33,7 @@ function useAgentsEquityData(agentIds: string[]) {
   const agentsKey = agentIds.sort().join(',');
   
   // Fetch all equity data in a single SWR call
+  // Use agentsKey as the cache key to ensure cache is invalidated when agent list changes
   const { data: allEquityData } = useSWR(
     agentsKey ? `/agents/equity-batch?ids=${agentsKey}` : null,
     async () => {
@@ -38,9 +41,39 @@ function useAgentsEquityData(agentIds: string[]) {
       const results = await Promise.all(
         agentIds.map(async (id) => {
           try {
-            const data = await api.getEquityHistory(id);
-            return { agentId: id, data: data || [] };
+            const [equityData, accountData] = await Promise.all([
+              api.getEquityHistory(id).catch(() => []),
+              api.getAccount(id).catch(() => null),
+            ]);
+            
+            // If equity history is empty but account data exists, create initial point
+            if ((!equityData || equityData.length === 0) && accountData) {
+              const now = new Date().toISOString();
+              const adjustedEquity = accountData.adjusted_total_balance ?? accountData.total_wallet_balance ?? 0;
+              const grossEquity = accountData.gross_total_balance ?? accountData.total_wallet_balance ?? adjustedEquity;
+              return {
+                agentId: id,
+                data: [{
+                  timestamp: now,
+                  cycle: 0,
+                  equity: adjustedEquity,
+                  adjusted_equity: adjustedEquity,
+                  gross_equity: grossEquity,
+                  pnl: accountData.total_unrealized_profit || 0,
+                  unrealized_pnl: accountData.total_unrealized_profit || 0,
+                  net_deposits: accountData.net_deposits || 0,
+                  external_cash_flow: accountData.external_cash_flow || 0,
+                }],
+              };
+            }
+            
+            return { agentId: id, data: equityData || [] };
           } catch (error) {
+            // Silently handle 404s (agent not found) - this is expected when agents are removed
+            if (error instanceof Error && error.message.includes('404')) {
+              console.debug(`Agent ${id} not found, skipping`);
+              return { agentId: id, data: [] };
+            }
             console.error(`Failed to fetch equity for ${id}:`, error);
             return { agentId: id, data: [] };
           }
@@ -48,36 +81,46 @@ function useAgentsEquityData(agentIds: string[]) {
       );
       return results;
     },
-    { refreshInterval: 30000 } // Refresh every 30 seconds
+    { 
+      refreshInterval: 30000, // Refresh every 30 seconds
+      revalidateOnFocus: false, // Don't revalidate on window focus to avoid stale agent requests
+      revalidateOnReconnect: true, // Revalidate when network reconnects
+      dedupingInterval: 5000, // Dedupe requests within 5 seconds
+    }
   );
 
   return allEquityData || [];
 }
 
 export function AccountValueChart({ agents }: AccountValueChartProps) {
+  const language = useLanguage((s) => s.language);
+  const translations = getTranslation(language);
+  const tLeaderboard = translations.leaderboard;
+  const tCharts = translations.charts;
   const [range, setRange] = useState<Range>("ALL");
   const [mode, setMode] = useState<Mode>("$");
   const [vw, setVw] = useState<number>(0);
   
-  // Get all defined models and merge with running agents
-  const allModels = useMemo(() => {
-    const allDefinedModels = getAllModels();
-    const runningMap = new Map(agents.map(a => [a.id, a]));
+  // Use running agents directly for legend, not predefined models
+  // Include model_id for getting correct color and icon
+  const runningAgents = useMemo(() => {
+    const result = agents.filter(a => a.is_running).map(a => ({
+      id: a.id,
+      name: a.name || a.id,
+      is_running: true,
+      model_id: a.model_id,
+      model_config_id: a.model_config_id,
+      model_provider: a.model_provider,
+      llm_model: a.llm_model,
+    }));
     
-    return allDefinedModels.map(model => {
-      const runningAgent = runningMap.get(model.id);
-      return {
-        id: model.id,
-        name: model.name,
-        is_running: runningAgent?.is_running || false,
-      };
-    });
+    return result;
   }, [agents]);
 
-  const [active, setActive] = useState<Set<string>>(new Set(allModels.filter(m => m.is_running).map(m => m.id)));
+  const [active, setActive] = useState<Set<string>>(new Set(runningAgents.map(a => a.id)));
 
   // Fetch equity history for running agents only
-  const runningAgentIds = useMemo(() => allModels.filter(m => m.is_running).map(m => m.id), [allModels]);
+  const runningAgentIds = useMemo(() => runningAgents.map(a => a.id), [runningAgents]);
   const equityDataQueries = useAgentsEquityData(runningAgentIds);
   
   // Track viewport width for responsive sizing
@@ -97,62 +140,123 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
   }, []);
 
   // Combine equity history from all agents into chart data
-  const chartData = useMemo(() => {
-    // Create a map of timestamps to data points
-    const timestampMap = new Map<number, any>();
+  const { chartDataGross, chartDataAdjusted } = useMemo(() => {
+    const timestampMap = new Map<number, {
+      timestamp: Date;
+      gross: Record<string, number>;
+      adjusted: Record<string, number>;
+    }>();
 
     equityDataQueries.forEach(({ agentId, data }) => {
       if (!data || data.length === 0) return;
 
       data.forEach((point: EquityPoint) => {
-        const timestamp = new Date(point.timestamp).getTime();
-        if (!timestampMap.has(timestamp)) {
-          timestampMap.set(timestamp, { timestamp: new Date(point.timestamp) });
+        const timestampMs = new Date(point.timestamp).getTime();
+        if (!timestampMap.has(timestampMs)) {
+          timestampMap.set(timestampMs, {
+            timestamp: new Date(point.timestamp),
+            gross: {},
+            adjusted: {},
+          });
         }
-        timestampMap.get(timestamp)![agentId] = point.equity;
+        const bucket = timestampMap.get(timestampMs)!;
+        const gross = point.gross_equity ?? point.equity;
+        const adjusted = point.adjusted_equity ?? point.equity;
+        if (typeof gross === "number") bucket.gross[agentId] = gross;
+        if (typeof adjusted === "number") bucket.adjusted[agentId] = adjusted;
       });
     });
 
-    // Convert map to array and sort by timestamp
-    const points = Array.from(timestampMap.values()).sort(
+    let buckets = Array.from(timestampMap.values()).sort(
       (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
     );
 
-    // Filter by range
-    if (range === "72H" && points.length > 0) {
-      const cutoff = Date.now() - 72 * 60 * 60 * 1000; // 72 hours ago
-      return points.filter(p => p.timestamp.getTime() >= cutoff);
+    if (range === "72H" && buckets.length > 0) {
+      const cutoff = Date.now() - 72 * 60 * 60 * 1000;
+      buckets = buckets.filter((bucket) => bucket.timestamp.getTime() >= cutoff);
     }
 
-    return points;
+    const grossPoints = buckets.map((bucket) => ({
+      timestamp: bucket.timestamp,
+      ...bucket.gross,
+    }));
+
+    const adjustedPoints = buckets.map((bucket) => ({
+      timestamp: bucket.timestamp,
+      ...bucket.adjusted,
+    }));
+
+    return {
+      chartDataGross: grossPoints,
+      chartDataAdjusted: adjustedPoints,
+    };
   }, [equityDataQueries, range]);
 
-  // Calculate initial equity for percentage mode
-  const initialEquity = useMemo(() => {
-    const initial: Record<string, number> = {};
-    if (chartData.length > 0) {
-      runningAgentIds.forEach(id => {
-        initial[id] = chartData[0]?.[id] || 10000;
-      });
-    }
-    return initial;
-  }, [chartData, runningAgentIds]);
-
-  // Convert to percentage if needed
+  // Convert to display data (gross for $, adjusted percentage for %)
   const displayData = useMemo(() => {
     if (mode === "%") {
-      return chartData.map(point => {
+      const initial: Record<string, number> = {};
+      runningAgentIds.forEach((id) => {
+        const firstPoint = chartDataAdjusted.find(
+          (point) => typeof (point as any)[id] === "number"
+        );
+        const value = firstPoint ? (firstPoint as any)[id] : undefined;
+        initial[id] = typeof value === "number" && value !== 0 ? value : 10000;
+      });
+
+      return chartDataAdjusted.map(point => {
         const newPoint: any = { timestamp: point.timestamp };
         runningAgentIds.forEach(id => {
-          if (point[id] !== undefined && initialEquity[id]) {
-            newPoint[id] = ((point[id] - initialEquity[id]) / initialEquity[id]) * 100;
+          const base = initial[id];
+          const value = (point as any)[id];
+          if (typeof value === "number" && typeof base === "number" && base !== 0) {
+            newPoint[id] = ((value - base) / base) * 100;
           }
         });
         return newPoint;
       });
     }
-    return chartData;
-  }, [chartData, mode, runningAgentIds, initialEquity]);
+    return chartDataGross;
+  }, [chartDataAdjusted, chartDataGross, mode, runningAgentIds]);
+
+  const yAxisDomain = useMemo<[number | "auto", number | "auto"]>(() => {
+    const visibleIds = runningAgentIds.filter((id) =>
+      active.size ? active.has(id) : true
+    );
+    let min = Number.POSITIVE_INFINITY;
+    let max = Number.NEGATIVE_INFINITY;
+
+    if (visibleIds.length === 0 || displayData.length === 0) {
+      return ["auto", "auto"];
+    }
+
+    for (const point of displayData) {
+      for (const id of visibleIds) {
+        const value = (point as any)[id];
+        if (typeof value === "number" && Number.isFinite(value)) {
+          if (value < min) min = value;
+          if (value > max) max = value;
+        }
+      }
+    }
+
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      return ["auto", "auto"];
+    }
+
+    const range = max - min;
+    const base = range !== 0 ? range : Math.max(Math.abs(max), 1);
+    const padding = base * 0.1;
+
+    const upper = max + padding;
+    let lower = min - padding * 0.6;
+
+    if (mode !== "%" && lower < 0) {
+      lower = 0;
+    }
+
+    return [lower, upper];
+  }, [active, displayData, mode, runningAgentIds]);
 
   // Calculate last index and value per model for end dot rendering
   const lastIdxById = useMemo(() => {
@@ -195,6 +299,32 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
     }
   };
 
+  const formatYAxisTick = useCallback(
+    (value: number) => {
+      if (mode === "%") {
+        return `${value.toFixed(1)}%`;
+      }
+      if (!Number.isFinite(value)) {
+        return "";
+      }
+      const abs = Math.abs(value);
+      if (abs >= 1_000_000_000) {
+        return `$${(value / 1_000_000_000).toFixed(1)}B`;
+      }
+      if (abs >= 1_000_000) {
+        return `$${(value / 1_000_000).toFixed(1)}M`;
+      }
+      if (abs >= 10_000) {
+        return `$${(value / 1_000).toFixed(1)}K`;
+      }
+      return `$${Number(value).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`;
+    },
+    [mode],
+  );
+
   // End-logo size and dynamic right margin
   const endLogoBaseSize = vw < 380 ? 21 : vw < 640 ? 27 : vw < 1024 ? 42 : 44;
   const endLogoSize = Math.round((endLogoBaseSize * 2) / 3);
@@ -210,8 +340,10 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
     if (active.size && !active.has(id))
       return <g key={`empty-${id}-${index}`} />;
     
-    const icon = getModelIcon(id);
-    const color = getModelColor(id);
+    // Get model_id from agent to find correct icon and color
+    const agent = runningAgents.find(a => a.id === id);
+    const icon = getAgentModelIcon(agent);
+    const color = getAgentModelColor(agent);
     const bg = color || "var(--chart-logo-bg)";
     const ring = typeof bg === "string" && bg.startsWith("#")
       ? adjustLuminance(bg, -0.15)
@@ -319,7 +451,7 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
           className="text-xs font-semibold tracking-wider"
           style={{ color: "var(--muted-text)" }}
         >
-          Account Value
+          {tCharts?.accountValue ?? tLeaderboard.accountValue}
         </div>
         <div className="hidden sm:flex items-center gap-2 text-[11px]">
           {/* Range Toggle */}
@@ -379,8 +511,8 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
               <div className="flex h-full items-center justify-center" style={{ color: "var(--muted-text)" }}>
                 <div className="text-center">
                   <div className="text-2xl mb-2">📈</div>
-                  <p className="text-sm">No equity data available yet</p>
-                  <p className="text-xs mt-1">Data will appear after trading starts</p>
+                  <p className="text-sm">{tCharts.noEquityData}</p>
+                  <p className="text-xs mt-1">{tCharts.tradingNotStarted}</p>
                 </div>
               </div>
             ) : (
@@ -415,11 +547,10 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
                   tick={{ fill: "var(--axis-tick)", fontSize: 11 }}
                 />
                 <YAxis
-                  tickFormatter={(v: number) =>
-                    mode === "%" ? `${v.toFixed(1)}%` : `$${Math.round(v).toLocaleString()}`
-                  }
+                  tickFormatter={formatYAxisTick}
                   tick={{ fill: "var(--axis-tick)", fontSize: 11 }}
                   width={60}
+                  domain={yAxisDomain}
                 />
                 <Tooltip
                   contentStyle={{
@@ -437,27 +568,35 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
                   stroke="var(--ref-line)"
                   strokeDasharray="4 4"
                 />
-                {runningAgentIds.map((id) => (
-                  <Line
-                    key={id}
-                    type="monotone"
-                    dataKey={id}
-                    stroke={getModelColor(id)}
-                    strokeWidth={1.8}
-                    dot={renderEndDot(id)}
-                    name={getModelName(id)}
-                    hide={active.size > 0 && !active.has(id)}
-                    className="series"
-                  />
-                ))}
+                {runningAgentIds.map((id) => {
+                  // Get model_id from agent to find correct color
+                  const agent = runningAgents.find(a => a.id === id);
+                  const color = getAgentModelColor(agent);
+                  const agentName = agent?.name || id;
+                  
+                  return (
+                    <Line
+                      key={id}
+                      type="monotone"
+                      dataKey={id}
+                      stroke={color}
+                      strokeWidth={2.5}
+                      dot={renderEndDot(id)}
+                      name={agentName}
+                      hide={active.size > 0 && !active.has(id)}
+                      connectNulls
+                      className="series"
+                    />
+                  );
+                })}
               </LineChart>
             </ResponsiveContainer>
             )}
           </div>
         </div>
 
-        {/* Legend */}
-        {allModels.length > 0 && (
+        {/* Legend - Show only running agents */}
+        {runningAgents.length > 0 && (
           <div className="mt-3">
             {/* Small screens: horizontal scrollable legend */}
             <div className="block md:hidden">
@@ -465,29 +604,26 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
                 className="flex flex-nowrap gap-2 overflow-x-auto whitespace-nowrap pr-1"
                 style={{ WebkitOverflowScrolling: "touch" }}
               >
-                {allModels.map((model) => {
-                  const isRunning = model.is_running;
-                  const activeOn = isRunning && (active.size === 0 || active.has(model.id));
-                  const icon = getModelIcon(model.id);
-                  const displayColor = isRunning ? getModelColor(model.id) : "#6b7280";
+                {runningAgents.map((agent) => {
+                  const activeOn = active.size === 0 || active.has(agent.id);
+                  // Use model_id to get correct icon and color
+                  const icon = getAgentModelIcon(agent);
+                  const displayColor = getAgentModelColor(agent);
                   
                   return (
                     <button
-                      key={model.id}
-                      disabled={!isRunning}
+                      key={agent.id}
                       className="inline-flex min-w-[110px] flex-shrink-0 flex-col items-center justify-center gap-1 rounded border px-2 py-2 text-[11px] chip-btn"
                       style={{
                         borderColor: "var(--chip-border)",
                         background: activeOn ? "var(--btn-active-bg)" : "transparent",
-                        color: isRunning ? (activeOn ? "var(--btn-active-fg)" : "var(--btn-inactive-fg)") : "#6b7280",
-                        opacity: isRunning ? 1 : 0.5,
-                        cursor: isRunning ? "pointer" : "not-allowed",
+                        color: activeOn ? "var(--btn-active-fg)" : "var(--btn-inactive-fg)",
+                        cursor: "pointer",
                       }}
                       onClick={() => {
-                        if (!isRunning) return;
                         setActive((prev) => {
-                          if (prev.size === 1 && prev.has(model.id)) return new Set(runningAgentIds);
-                          return new Set([model.id]);
+                          if (prev.size === 1 && prev.has(agent.id)) return new Set(runningAgentIds);
+                          return new Set([agent.id]);
                         });
                       }}
                     >
@@ -505,7 +641,6 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
                                 src={icon}
                                 alt=""
                                 className="h-full w-full object-contain"
-                                style={{ opacity: isRunning ? 1 : 0.6 }}
                               />
                             </span>
                           ) : (
@@ -514,21 +649,16 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
                               style={{ background: displayColor }}
                             />
                           )}
-                          {isRunning && (
-                            <span className="px-1 py-0.5 rounded text-[8px] font-semibold leading-none" style={{ background: "#10b981", color: "#fff" }}>
-                              LIVE
-                            </span>
-                          )}
+                          <span className="px-1 py-0.5 rounded text-[8px] font-semibold leading-none" style={{ background: "#10b981", color: "#fff" }}>
+                            LIVE
+                          </span>
                         </div>
                         <span className="text-[9px] text-center leading-tight max-w-full break-words px-1" style={{ wordBreak: "break-word" }}>
-                          {getModelName(model.id)}
+                          {agent.name}
                         </span>
                       </div>
                       <div className="font-semibold leading-tight tabular-nums text-[11px] mt-0.5">
-                        {isRunning 
-                          ? formatValue(lastValById[model.id])
-                          : "—"
-                        }
+                        {formatValue(lastValById[agent.id])}
                       </div>
                     </button>
                   );
@@ -537,30 +667,28 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
             </div>
 
             {/* Desktop: equal-width grid legend */}
-            <div className="hidden md:grid gap-2" style={{ gridTemplateColumns: `repeat(${allModels.length}, minmax(0, 1fr))` }}>
-              {allModels.map((model) => {
-                const isRunning = model.is_running;
-                const activeOn = isRunning && (active.size === 0 || active.has(model.id));
-                const icon = getModelIcon(model.id);
-                const displayColor = isRunning ? getModelColor(model.id) : "#6b7280";
+            <div className="hidden md:grid gap-2" style={{ gridTemplateColumns: `repeat(${runningAgents.length}, minmax(0, 1fr))` }}>
+              {runningAgents.map((agent) => {
+                const activeOn = active.size === 0 || active.has(agent.id);
+                // Use model_id to get correct icon and color
+                const modelId = agent.model_id || agent.id;
+                const icon = getAgentModelIcon(agent);
+                const displayColor = getAgentModelColor(agent);
                 
                 return (
                   <button
-                    key={model.id}
-                    disabled={!isRunning}
+                    key={agent.id}
                     className="w-full inline-flex flex-col items-center justify-center gap-1 rounded border px-2 py-2 text-[11px] chip-btn"
                     style={{
                       borderColor: "var(--chip-border)",
                       background: activeOn ? "var(--btn-active-bg)" : "transparent",
-                      color: isRunning ? (activeOn ? "var(--btn-active-fg)" : "var(--btn-inactive-fg)") : "#6b7280",
-                      opacity: isRunning ? 1 : 0.5,
-                      cursor: isRunning ? "pointer" : "not-allowed",
+                      color: activeOn ? "var(--btn-active-fg)" : "var(--btn-inactive-fg)",
+                      cursor: "pointer",
                     }}
                     onClick={() => {
-                      if (!isRunning) return;
                       setActive((prev) => {
-                        if (prev.size === 1 && prev.has(model.id)) return new Set(runningAgentIds);
-                        return new Set([model.id]);
+                        if (prev.size === 1 && prev.has(agent.id)) return new Set(runningAgentIds);
+                        return new Set([agent.id]);
                       });
                     }}
                   >
@@ -578,7 +706,6 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
                               src={icon}
                               alt=""
                               className="h-full w-full object-contain"
-                              style={{ opacity: isRunning ? 1 : 0.6 }}
                             />
                           </span>
                         ) : (
@@ -587,21 +714,16 @@ export function AccountValueChart({ agents }: AccountValueChartProps) {
                             style={{ background: displayColor }}
                           />
                         )}
-                        {isRunning && (
-                          <span className="px-1 py-0.5 rounded text-[8px] font-semibold leading-none" style={{ background: "#10b981", color: "#fff" }}>
-                            LIVE
-                          </span>
-                        )}
+                        <span className="px-1 py-0.5 rounded text-[8px] font-semibold leading-none" style={{ background: "#10b981", color: "#fff" }}>
+                          LIVE
+                        </span>
                       </div>
                       <span className="text-[9px] text-center leading-tight max-w-full break-words px-1" style={{ wordBreak: "break-word" }}>
-                        {getModelName(model.id)}
+                        {agent.name}
                       </span>
                     </div>
                     <div className="font-semibold leading-tight tabular-nums text-[11px] mt-0.5">
-                      {isRunning 
-                        ? formatValue(lastValById[model.id])
-                        : "—"
-                      }
+                      {formatValue(lastValById[agent.id])}
                     </div>
                   </button>
                 );

@@ -3,12 +3,13 @@
 import { useState, useMemo } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/api";
-import { getModelName, getModelColor, getAllModels } from "@/lib/model/meta";
+import { getAgentModelColor } from "@/lib/model/meta";
 import { fmtUSD } from "@/lib/utils/formatters";
 import { getCoinIcon } from "@/lib/utils/coinIcons";
 import LeaderboardTable from "./LeaderboardTable";
 import { useLanguage } from "@/store/useLanguage";
 import { getTranslation } from "@/lib/i18n";
+import type { Agent } from "@/types";
 
 export default function LeaderboardOverview() {
   const language = useLanguage((s) => s.language);
@@ -21,19 +22,30 @@ export default function LeaderboardOverview() {
     refreshInterval: 10000,
   });
 
-  // Get all defined models and merge with running agents
-  const agents = useMemo(() => {
-    const allModels = getAllModels();
-    const runningMap = new Map((runningAgents || []).map(a => [a.id, a]));
-    
-    return allModels.map(model => {
-      const runningAgent = runningMap.get(model.id);
+  // Use agents directly from API, no need to merge with predefined models
+  const agents = useMemo<Agent[]>(() => {
+    return (runningAgents || []).map((a): Agent => {
+      const dexTypeRaw = (a.dex_type || "").toLowerCase();
+      const dexTypeNorm: Agent["dex_type"] =
+        dexTypeRaw === "hyperliquid"
+          ? "hyperliquid"
+          : dexTypeRaw === "aster"
+          ? "aster"
+          : undefined;
+
       return {
-        id: model.id,
-        name: model.name,
-        is_running: runningAgent?.is_running || false,
-        cycle_count: runningAgent?.cycle_count || 0,
-        runtime_minutes: runningAgent?.runtime_minutes || 0,
+        id: a.id,
+        name: a.name || a.id,
+        is_running: a.is_running || false,
+        cycle_count: a.cycle_count || 0,
+        runtime_minutes: a.runtime_minutes || 0,
+        // Multi-DEX fields from API
+        dex_type: dexTypeNorm,
+        account_id: a.account_id,
+        model_id: a.model_id,
+        model_provider: a.model_provider,
+        model_config_id: a.model_config_id,
+        llm_model: a.llm_model,
       };
     });
   }, [runningAgents]);
@@ -76,8 +88,9 @@ export default function LeaderboardOverview() {
     let winner: typeof agents[0] | null = null;
     
     allAccountsData.forEach(({ agentId, data }) => {
-      if (data?.total_wallet_balance && data.total_wallet_balance > maxEquity) {
-        maxEquity = data.total_wallet_balance;
+      const equityValue = data?.adjusted_total_balance ?? data?.total_wallet_balance;
+      if (equityValue && equityValue > maxEquity) {
+        maxEquity = equityValue;
         winner = agents.find(a => a.id === agentId) || null;
       }
     });
@@ -159,14 +172,18 @@ function TabButton({
 }
 
 function WinnerCard({ agent, symbols }: { agent: any; symbols: string[] }) {
+  const language = useLanguage((s) => s.language);
+  const t = getTranslation(language).leaderboard;
   const { data: account } = useSWR(
     agent ? `/agent/${agent.id}/account` : null,
     agent ? () => api.getAccount(agent.id) : null,
     { refreshInterval: 10000 }
   );
 
-  const color = agent ? getModelColor(agent.id) : undefined;
-  const equity = account?.total_wallet_balance || 0;
+  const color = agent ? getAgentModelColor(agent) : undefined;
+  const equityRaw = account?.gross_total_balance ?? account?.total_wallet_balance ?? 0;
+  const equityAdjusted = account?.adjusted_total_balance ?? equityRaw;
+  const netDeposits = account?.net_deposits ?? 0;
 
   return (
     <div
@@ -177,7 +194,7 @@ function WinnerCard({ agent, symbols }: { agent: any; symbols: string[] }) {
       }}
     >
       <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--muted-text)" }}>
-        WINNING MODEL
+        {t.winningModel}
       </div>
       {agent ? (
         <div className="space-y-3">
@@ -189,7 +206,7 @@ function WinnerCard({ agent, symbols }: { agent: any; symbols: string[] }) {
             />
             <div className="flex-1">
               <div className="text-base font-bold" style={{ color: "var(--foreground)" }}>
-                {getModelName(agent.id)}
+                {agent.name || agent.id}
               </div>
             </div>
           </div>
@@ -197,17 +214,27 @@ function WinnerCard({ agent, symbols }: { agent: any; symbols: string[] }) {
           {/* Total Equity */}
           <div className="border-t pt-3" style={{ borderColor: "var(--panel-border)" }}>
             <div className="text-xs uppercase tracking-wider mb-1" style={{ color: "var(--muted-text)" }}>
-              TOTAL EQUITY
+              {t.totalEquity}
             </div>
             <div className="text-xl font-bold tabular-nums" style={{ color: "var(--foreground)" }}>
-              {fmtUSD(equity)}
+              {fmtUSD(equityRaw)}
+            </div>
+            <div className="mt-2 grid gap-1 text-xs" style={{ color: "var(--muted-text)" }}>
+              <div className="flex items-center justify-between">
+                <span>{t.netDeposits}</span>
+                <span style={{ color: "var(--foreground)" }}>{fmtUSD(netDeposits)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>{t.adjustedEquity}</span>
+                <span style={{ color: "var(--foreground)" }}>{fmtUSD(equityAdjusted)}</span>
+              </div>
             </div>
           </div>
 
           {/* Active Positions */}
           <div className="border-t pt-3" style={{ borderColor: "var(--panel-border)" }}>
             <div className="text-xs uppercase tracking-wider mb-2" style={{ color: "var(--muted-text)" }}>
-              ACTIVE POSITIONS
+              {t.activePositions}
             </div>
             <div className="flex flex-wrap gap-2">
               {symbols.length > 0 ? (
@@ -235,7 +262,7 @@ function WinnerCard({ agent, symbols }: { agent: any; symbols: string[] }) {
                 })
               ) : (
                 <div className="text-sm" style={{ color: "var(--muted-text)" }}>
-                  No active positions
+                  {t.noActivePositions}
                 </div>
               )}
             </div>
@@ -243,7 +270,7 @@ function WinnerCard({ agent, symbols }: { agent: any; symbols: string[] }) {
         </div>
       ) : (
         <div className="text-sm" style={{ color: "var(--muted-text)" }}>
-          No data
+          {t.noData}
         </div>
       )}
     </div>
@@ -310,7 +337,7 @@ function ModelBarsChart({ agents }: { agents: any[] }) {
         </div>
       <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">
         {agentsWithAccounts.map(({ agent, equity }) => {
-          const color = getModelColor(agent.id);
+          const color = getAgentModelColor(agent);
           const pct = Math.max(0, Math.min(equity / SCALE, 1));
           const fill = Math.max(4, Math.round(pct * FULL));
 
@@ -338,7 +365,7 @@ function ModelBarsChart({ agents }: { agents: any[] }) {
                 />
               </div>
               <div className="text-[11px] text-center" style={{ color: "var(--muted-text)" }}>
-                {getModelName(agent.id)}
+                {agent.name || agent.id}
               </div>
             </div>
           );
