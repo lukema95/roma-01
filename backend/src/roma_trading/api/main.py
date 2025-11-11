@@ -17,7 +17,7 @@ Endpoints:
 
 import asyncio
 from typing import Optional
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
@@ -38,6 +38,7 @@ except ImportError as exc:  # pragma: no cover - handled at runtime
     require_payment = None  # type: ignore
     HTTPInputSchema = None  # type: ignore
     logger.warning("x402 package not installed: {}", exc)
+from roma_trading.api.routes import config as config_routes
 
 
 # Global agent manager
@@ -84,6 +85,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register routers
+app.include_router(config_routes.router)
+config_routes.set_agent_manager(agent_manager)
 
 
 def configure_x402_payment(app: FastAPI):
@@ -440,7 +445,10 @@ class ChatMessage(BaseModel):
 
 
 @app.get("/api/agents/{agent_id}/prompts")
-async def get_custom_prompts(agent_id: str):
+async def get_custom_prompts(
+    agent_id: str,
+    _: dict = Depends(config_routes.get_current_admin_token),
+):
     """
     Get agent's custom prompt configuration
     
@@ -474,8 +482,34 @@ async def get_custom_prompts(agent_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/agents/{agent_id}/prompts/system")
+async def get_system_prompt(agent_id: str, language: Optional[str] = Query(None)):
+    """
+    Get core system prompt without custom sections. Publicly accessible.
+    """
+    try:
+        agent = agent_manager.get_agent(agent_id)
+        system_prompt = agent._build_system_prompt(language=language, include_custom=False)
+        return {
+            "status": "success",
+            "data": {
+                "system_prompt": system_prompt,
+                "length": len(system_prompt),
+            },
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to build system prompt: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/agents/{agent_id}/prompts/preview")
-async def get_full_prompt_preview(agent_id: str):
+async def get_full_prompt_preview(
+    agent_id: str,
+    language: Optional[str] = Query(None),
+    _: dict = Depends(config_routes.get_current_admin_token),
+):
     """
     Get the complete system prompt that will be sent to AI
     
@@ -489,7 +523,7 @@ async def get_full_prompt_preview(agent_id: str):
         agent = agent_manager.get_agent(agent_id)
         
         # Build the actual system prompt using agent's method
-        full_prompt = agent._build_system_prompt()
+        full_prompt = agent._build_system_prompt(language=language, include_custom=True)
         
         return {
             "status": "success",
@@ -535,7 +569,11 @@ async def chat_with_ai(chat_request: ChatMessage):
 
 
 @app.put("/api/agents/{agent_id}/prompts")
-async def update_custom_prompts(agent_id: str, prompts: CustomPromptUpdate):
+async def update_custom_prompts(
+    agent_id: str,
+    prompts: CustomPromptUpdate,
+    _: dict = Depends(config_routes.get_current_admin_token),
+):
     """
     Update agent's custom prompts
     

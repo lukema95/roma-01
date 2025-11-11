@@ -104,6 +104,10 @@ class Settings(BaseSettings):
     remote_fallback_mode: str = "local"
     remote_timeout_seconds: int = 10
     remote_retry_limit: int = 1
+    # Config Portal Auth
+    config_auth_secret: str = "roma-config-secret"
+    config_token_exp_minutes: int = 120
+    config_file_path: str = "config/trading_config.yaml"
 
     @property
     def cors_origins_list(self) -> List[str]:

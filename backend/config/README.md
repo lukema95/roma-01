@@ -1,5 +1,7 @@
 # ROMA-01 Trading Configuration Guide
 
+**语言选择 / Language:** [English](README.md) · [中文](README.zh-CN.md)
+
 This directory contains configuration files for the ROMA-01 trading platform.
 
 ## ⚠️ Configuration Update
@@ -47,6 +49,15 @@ This file controls system-wide settings that apply to all trading agents.
 | `system.scan_interval_minutes` | Integer | How often each agent scans the market and makes decisions (in minutes) | 3 |
 | `system.max_concurrent_agents` | Integer | Maximum number of agents that can run simultaneously | 6 |
 | `system.log_level` | String | Logging level (DEBUG, INFO, WARNING, ERROR) | INFO |
+| `system.prompt_language` | String | Default language for system prompts (`en` or `zh`) | en |
+
+### Authentication Settings
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `auth.admin.username` | String | Default administrator username used for Settings portal login | admin |
+| `auth.admin.password_hash` | String | PBKDF2-SHA256 hash of the administrator password | Hash for `admin123` |
+| `auth.admin.updated_at` | String | ISO timestamp when the password was last updated | 2025-11-10T00:00:00Z |
 
 ### API Settings
 
