@@ -71,10 +71,14 @@ function AgentCard({
     );
   }
 
-  const totalPnl = account.total_unrealized_profit || 0;
-  const totalEquity = account.total_wallet_balance || 0;
-  const pnlPct = totalEquity > 0 ? (totalPnl / totalEquity) * 100 : 0;
-  const isProfit = pnlPct >= 0;
+  // Calculate return rate using adjusted balance and initial balance
+  const adjustedBalance = account.adjusted_total_balance ?? account.total_wallet_balance ?? 0;
+  const initialBalance = account.initial_balance ?? 10000;
+  const returnRate = initialBalance > 0 ? ((adjustedBalance - initialBalance) / initialBalance) * 100 : 0;
+
+  // Total P&L for display (can use unrealized or adjusted balance difference)
+  const totalPnl = adjustedBalance - initialBalance;
+  const isProfit = returnRate >= 0;
 
   return (
     <button
@@ -109,14 +113,14 @@ function AgentCard({
       <div className="mb-2">
         <p className="text-xs text-gray-500 mb-1">Balance</p>
         <p className="text-lg font-bold font-mono text-gray-900">
-          ${totalEquity.toFixed(2)}
+          ${adjustedBalance.toFixed(2)}
         </p>
       </div>
 
       {/* P&L */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs text-gray-500 mb-1">P&L</p>
+          <p className="text-xs text-gray-500 mb-1">Return</p>
           <div className="flex items-center gap-1">
             {isProfit ? (
               <TrendingUp size={14} className="text-green-600" />
@@ -129,7 +133,7 @@ function AgentCard({
               }`}
             >
               {isProfit ? "+" : ""}
-              {pnlPct.toFixed(2)}%
+              {returnRate.toFixed(2)}%
             </span>
           </div>
         </div>
