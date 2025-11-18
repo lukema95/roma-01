@@ -65,7 +65,7 @@ export default function HomePage() {
           </div>
         ) : (
           <>
-            <div className="lg:col-span-2 h-[95%]">
+            <div className="lg:col-span-2 h-full">
               <MultiAgentChart agents={agents.filter(a => a.is_running)} />
             </div>
             <div className="lg:col-span-1 h-full overflow-hidden">
