@@ -192,9 +192,11 @@ Long-short balance:
     // Chat
     chat: {
       welcome: "Chat with AI Assistant",
-      exampleQuestions: "Ask me anything about trading strategies, prompts, or platform features.",
+      exampleQuestions: "Ask me anything about trading strategies, prompts, platform features, or request token analysis.",
       example1: "What are some basic trading prompt suggestions?",
       example2: "How does risk management work in this platform?",
+      example3: "Analyze BTC",
+      example4: "What should I do with ETH?",
       placeholder: "Type your message...",
       send: "Send",
       thinking: "Thinking...",
@@ -511,9 +513,11 @@ Long-short balance:
     // Chat
     chat: {
       welcome: "与 AI 助手聊天",
-      exampleQuestions: "问我关于交易策略、提示词或平台功能的任何问题。",
+      exampleQuestions: "问我关于交易策略、提示词、平台功能，或请求代币分析的任何问题。",
       example1: "有哪些基本的交易提示词建议？",
       example2: "这个平台的风险管理是如何工作的？",
+      example3: "分析 BTC",
+      example4: "ETH 现在应该怎么操作？",
       placeholder: "输入您的消息...",
       send: "发送",
       thinking: "思考中...",
