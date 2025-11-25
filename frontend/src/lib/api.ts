@@ -199,8 +199,9 @@ export const api = {
   },
   
   // Chat with AI assistant
-  chat: async (message: string): Promise<{ message: string }> => {
-    const response = await fetch(`${API_BASE}/api/chat`, {
+  chat: async (message: string, language?: string): Promise<{ message: string }> => {
+    const qs = language ? `?language=${encodeURIComponent(language)}` : "";
+    const response = await fetch(`${API_BASE}/api/chat${qs}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message }),

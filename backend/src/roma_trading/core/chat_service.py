@@ -12,6 +12,7 @@ from loguru import logger
 from roma_trading.config import get_settings
 from roma_trading.agents import AgentManager
 from roma_trading.prompts import render_prompt
+from roma_trading.core.token_analysis_handler import TokenAnalysisHandler
 
 
 class ChatResponse(dspy.Signature):
@@ -26,6 +27,7 @@ class ChatService:
     
     def __init__(self, agent_manager: AgentManager):
         self.agent_manager = agent_manager
+        self.token_handler = TokenAnalysisHandler(agent_manager)
     
     def _get_llm(self):
         """Build an LM instance for this request without configuring DSPy globally."""
@@ -192,28 +194,119 @@ class ChatService:
         
         raise RuntimeError("No LLM available for chat. Please ensure at least one agent is configured.")
     
-    async def chat(self, message: str) -> str:
+    async def chat(self, message: str, language: str = "en") -> str:
         """
         Process a chat message and return AI response.
         
         Args:
             message: User's message
+            language: Language preference ("en" or "zh")
             
         Returns:
             AI assistant's response
         """
         try:
-            return await asyncio.to_thread(self._chat_sync, message)
+            # Check if this is a token analysis request
+            if self.token_handler.detect_analysis_request(message):
+                token_symbol = self.token_handler.extract_token_symbol(message)
+                logger.debug(f"Analysis request detected. Message: {message}, Token: {token_symbol}")
+                
+                if token_symbol:
+                    # Perform token analysis
+                    logger.info(f"Detected token analysis request for {token_symbol}")
+                    return await self._handle_token_analysis(
+                        message, token_symbol, language
+                    )
+                else:
+                    logger.debug(f"Analysis request detected but no token symbol found in: {message}")
+            
+            # Default to general chat
+            return await asyncio.to_thread(
+                self._chat_sync, message, language
+            )
                 
         except Exception as e:
             logger.error(f"Error in chat service: {e}", exc_info=True)
             raise
 
-    def _chat_sync(self, message: str) -> str:
+    async def _handle_token_analysis(
+        self, 
+        message: str, 
+        symbol: str, 
+        language: str
+    ) -> str:
+        """Handle token analysis request."""
+        try:
+            # Fetch token data
+            token_data = await self.token_handler.fetch_token_data(symbol)
+            
+            # Format analysis prompt
+            analysis_prompt = self.token_handler.format_analysis_prompt(
+                token_data, language
+            )
+            
+            # Generate AI response with analysis
+            return await asyncio.to_thread(
+                self._chat_sync_with_context,
+                message,
+                analysis_prompt,
+                language
+            )
+        except ValueError as e:
+            # Token not found or invalid symbol
+            logger.warning(f"Token analysis failed for {symbol}: {e}")
+            if language == "zh":
+                error_msg = f"抱歉，无法找到代币 {symbol}。该代币可能不在当前交易所支持列表中，或者代币符号不正确。请检查代币符号后重试。"
+            else:
+                error_msg = f"Sorry, I couldn't find token {symbol}. This token may not be available on the current exchange, or the symbol may be incorrect. Please check the token symbol and try again."
+            return error_msg
+        except Exception as e:
+            logger.error(f"Token analysis failed for {symbol}: {e}", exc_info=True)
+            # Fallback to general chat with error message
+            if language == "zh":
+                error_msg = f"分析 {symbol} 时遇到错误：{str(e)}。请稍后重试或检查代币符号是否正确。"
+            else:
+                error_msg = f"I encountered an error analyzing {symbol}: {str(e)}. Please try again later or check if the token symbol is correct."
+            return await asyncio.to_thread(
+                self._chat_sync, 
+                error_msg,
+                language
+            )
+    
+    def _chat_sync_with_context(
+        self, 
+        message: str, 
+        context: str, 
+        language: str
+    ) -> str:
+        """Run chat with additional context for token analysis."""
+        lm = self._get_llm()
+        
+        # Load enhanced system prompt for token analysis
+        try:
+            system_prompt = render_prompt("chat_token_analysis", language=language)
+        except ValueError:
+            # Fallback to general chat prompt if token analysis prompt not found
+            logger.warning(f"Token analysis prompt not found, using general chat prompt")
+            system_prompt = render_prompt("chat", language=language)
+        
+        # Combine context with user message
+        full_message = f"{context}\n\nUser Question: {message}"
+        
+        with dspy.context(lm=lm):
+            chat_module = dspy.ChainOfThought(ChatResponse)
+            result = chat_module(
+                system_context=system_prompt,
+                user_message=full_message
+            )
+        
+        return result.response.strip()
+    
+    def _chat_sync(self, message: str, language: str = "en") -> str:
         """Run chat module synchronously inside a worker thread."""
         lm = self._get_llm()
 
-        system_prompt = render_prompt("chat", language="en")
+        system_prompt = render_prompt("chat", language=language)
 
         with dspy.context(lm=lm):
             chat_module = dspy.ChainOfThought(ChatResponse)

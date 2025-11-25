@@ -867,10 +867,17 @@ class TradingAgent:
                 close_quantity = None
 
         if close_quantity is not None:
+            # Ensure close_quantity is positive and not greater than position_amt
+            close_quantity = abs(close_quantity)  # Ensure positive
             close_quantity = min(position_amt, max(0.0, close_quantity))
             if close_quantity <= 1e-12:
                 logger.warning("Computed close quantity too small; skipping close action")
                 return
+        
+        # Final validation before calling DEX
+        if close_quantity is not None and close_quantity <= 0:
+            logger.warning(f"Invalid close quantity {close_quantity} for {symbol} {side}; skipping")
+            return
         
         result = await self.dex.close_position(symbol, side, quantity=close_quantity)
         closed_quantity = result.get("closed_quantity") if isinstance(result, dict) else None

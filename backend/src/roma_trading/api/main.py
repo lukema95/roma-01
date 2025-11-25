@@ -458,19 +458,28 @@ async def get_full_prompt_preview(
 
 
 @app.post("/api/chat")
-async def chat_with_ai(chat_request: ChatMessage):
+async def chat_with_ai(
+    chat_request: ChatMessage,
+    language: Optional[str] = Query("en", description="Language preference (en or zh)")
+):
     """
     Chat with AI assistant about trading strategies, prompts, and platform features.
+    Now supports token analysis requests (e.g., "analyze BTC", "what about ETH?").
     
     Args:
         chat_request: Chat message from user
+        language: Language preference ("en" or "zh", default: "en")
     
     Returns:
         AI assistant's response
     """
     try:
+        # Validate language parameter
+        if language not in ["en", "zh"]:
+            language = "en"
+        
         chat_service = get_chat_service()
-        response = await chat_service.chat(chat_request.message)
+        response = await chat_service.chat(chat_request.message, language=language)
         
         return {
             "status": "success",

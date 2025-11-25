@@ -946,7 +946,7 @@ function ChatContent() {
     setIsLoading(true);
 
     try {
-      const response = await api.chat(userMessage);
+      const response = await api.chat(userMessage, language);
       setMessages((prev) => [...prev, { role: "assistant", content: response.message, timestamp: new Date() }]);
     } catch (error) {
       setMessages((prev) => [
@@ -1000,6 +1000,28 @@ function ChatContent() {
                 }}
               >
                 {t.example2 || "How does risk management work in this platform?"}
+              </button>
+              <button
+                onClick={() => setInput(t.example3 || "Analyze BTC")}
+                className="w-full text-left px-3 py-2 rounded border text-xs hover:opacity-80 transition-opacity"
+                style={{
+                  background: "var(--panel-bg)",
+                  borderColor: "var(--chip-border)",
+                  color: "var(--foreground)",
+                }}
+              >
+                {t.example3 || "Analyze BTC"}
+              </button>
+              <button
+                onClick={() => setInput(t.example4 || "What should I do with ETH?")}
+                className="w-full text-left px-3 py-2 rounded border text-xs hover:opacity-80 transition-opacity"
+                style={{
+                  background: "var(--panel-bg)",
+                  borderColor: "var(--chip-border)",
+                  color: "var(--foreground)",
+                }}
+              >
+                {t.example4 || "What should I do with ETH?"}
               </button>
             </div>
           </div>
