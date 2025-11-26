@@ -16,7 +16,8 @@ Endpoints:
 """
 
 import asyncio
-from typing import Optional
+from typing import Any, Dict, List, Optional
+from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -29,11 +30,18 @@ from roma_trading.config import get_settings
 from roma_trading.agents import AgentManager
 from roma_trading.core.analytics import TradingAnalytics
 from roma_trading.core.chat_service import initialize_chat_service, get_chat_service
+from roma_trading.core.trade_history_analyzer import TradeHistoryAnalyzer
+from roma_trading.core.analysis_scheduler import AnalysisScheduler
 from roma_trading.api.routes import config as config_routes
+from roma_trading.prompts import initialize_prompt_repository
 
 
 # Global agent manager
 agent_manager = AgentManager()
+
+# Global trade history analyzer and scheduler
+trade_history_analyzer: Optional[TradeHistoryAnalyzer] = None
+analysis_scheduler: Optional[AnalysisScheduler] = None
 
 
 @asynccontextmanager
@@ -42,13 +50,51 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting ROMA-01 Trading Platform...")
     
+    global trade_history_analyzer, analysis_scheduler
+    
     try:
+        initialize_prompt_repository()
         await agent_manager.load_agents_from_config()
         asyncio.create_task(agent_manager.start_all())
         logger.info("All agents started successfully")
         
         # Initialize chat service
         initialize_chat_service(agent_manager)
+        
+        # Initialize trade history analysis system
+        try:
+            # Get config for analysis system
+            config_path = Path("config/trading_config.yaml")
+            if config_path.exists():
+                with open(config_path, "r") as f:
+                    config = yaml.safe_load(f)
+                analysis_config = config.get("system", {}).get("trade_history_analysis", {})
+            else:
+                analysis_config = {}
+            
+            enabled = analysis_config.get("enabled", True)
+            interval_hours = analysis_config.get("analysis_interval_hours", 12.0)
+            analysis_period_days = analysis_config.get("analysis_period_days", 30)
+            min_trades_required = analysis_config.get("min_trades_required", 10)
+            
+            if enabled:
+                trade_history_analyzer = TradeHistoryAnalyzer(agent_manager=agent_manager)
+                
+                analysis_scheduler = AnalysisScheduler(
+                    analyzer=trade_history_analyzer,
+                    enabled=True,
+                    interval_hours=float(interval_hours),
+                    analysis_period_days=int(analysis_period_days),
+                    min_trades_required=int(min_trades_required),
+                )
+                
+                # Start scheduler (run immediately on startup)
+                await analysis_scheduler.start(run_immediately=True)
+                logger.info("Trade history analysis system initialized and started")
+            else:
+                logger.info("Trade history analysis is disabled")
+        except Exception as e:
+            logger.error(f"Failed to initialize trade history analysis: {e}", exc_info=True)
     except Exception as e:
         logger.error(f"Failed to start agents: {e}", exc_info=True)
     
@@ -56,6 +102,11 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down...")
+    
+    # Stop analysis scheduler
+    if analysis_scheduler:
+        await analysis_scheduler.stop()
+    
     await agent_manager.stop_all()
 
 
@@ -123,7 +174,8 @@ async def get_account(agent_id: str):
         if snapshot:
             return snapshot
         account = await agent.dex.get_account_balance()
-        return agent.logger_module.augment_account_balance(account)
+        initial_balance = agent.config.get("strategy", {}).get("initial_balance", 10000.0)
+        return agent.logger_module.augment_account_balance(account, initial_balance)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -358,6 +410,130 @@ class ChatMessage(BaseModel):
     message: str
 
 
+class ClosePositionRequest(BaseModel):
+    """Manual close position payload."""
+    symbol: str
+    side: str
+    quantity: Optional[float] = None
+    quantity_pct: Optional[float] = None
+
+    @staticmethod
+    def _normalize_side(value: str) -> str:
+        normalized = value.lower()
+        if normalized not in {"long", "short"}:
+            raise ValueError("side must be 'long' or 'short'")
+        return normalized
+
+    @staticmethod
+    def _normalize_symbol(value: str) -> str:
+        return value.upper()
+
+    @staticmethod
+    def _normalize_pct(value: Optional[float]) -> Optional[float]:
+        if value is None:
+            return None
+        if value <= 0:
+            raise ValueError("quantity_pct must be positive")
+        return value
+
+    @staticmethod
+    def _normalize_quantity(value: Optional[float]) -> Optional[float]:
+        if value is None:
+            return None
+        if value <= 0:
+            raise ValueError("quantity must be positive")
+        return value
+
+    def normalized(self) -> "ClosePositionRequest":
+        return self.copy(
+            update={
+                "symbol": self._normalize_symbol(self.symbol),
+                "side": self._normalize_side(self.side),
+                "quantity": self._normalize_quantity(self.quantity),
+                "quantity_pct": self._normalize_pct(self.quantity_pct),
+            }
+        )
+
+
+class CloseAllPositionsRequest(BaseModel):
+    """Payload for closing all positions across agents."""
+    agent_ids: Optional[List[str]] = None
+
+
+@app.post("/api/admin/agents/{agent_id}/positions/close")
+async def admin_close_position(
+    agent_id: str,
+    payload: ClosePositionRequest,
+    _: dict = Depends(config_routes.get_current_admin_token),
+):
+    """Manually close a single position for an agent."""
+    normalized = payload.normalized()
+    try:
+        agent = agent_manager.get_agent(agent_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    try:
+        result = await agent.close_position_manual(
+            symbol=normalized.symbol,
+            side=normalized.side,
+            quantity=normalized.quantity,
+            quantity_pct=normalized.quantity_pct,
+        )
+    except Exception as exc:
+        logger.error(f"Failed to close position {normalized.symbol} for {agent_id}: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Position not found or already closed")
+
+    return {"status": "success", "data": result}
+
+
+@app.post("/api/admin/positions/close-all")
+async def admin_close_all_positions(
+    request: CloseAllPositionsRequest,
+    _: dict = Depends(config_routes.get_current_admin_token),
+):
+    """Close every open position across the provided agents (or all agents by default)."""
+    target_agent_ids = request.agent_ids or [agent["id"] for agent in agent_manager.get_all_agents()]
+    summary: List[Dict[str, Any]] = []
+
+    for agent_id in target_agent_ids:
+        try:
+            agent = agent_manager.get_agent(agent_id)
+        except ValueError:
+            summary.append({"agent_id": agent_id, "closed": [], "error": "Agent not found"})
+            continue
+
+        try:
+            positions = await agent.dex.get_positions()
+        except Exception as exc:
+            logger.error(f"Failed to fetch positions for {agent_id}: {exc}")
+            summary.append({"agent_id": agent_id, "closed": [], "error": str(exc)})
+            continue
+
+        closed_results: List[Dict[str, Any]] = []
+        for position in positions:
+            try:
+                result = await agent.close_position_manual(position["symbol"], position["side"])
+                if result:
+                    closed_results.append(result)
+            except Exception as exc:
+                logger.error(f"Failed to close {position['symbol']} for {agent_id}: {exc}")
+                closed_results.append(
+                    {
+                        "symbol": position["symbol"],
+                        "side": position["side"],
+                        "error": str(exc),
+                    }
+                )
+
+        summary.append({"agent_id": agent_id, "closed": closed_results})
+
+    return {"status": "success", "data": summary}
+
+
 @app.get("/api/agents/{agent_id}/prompts")
 async def get_custom_prompts(
     agent_id: str,
@@ -455,19 +631,28 @@ async def get_full_prompt_preview(
 
 
 @app.post("/api/chat")
-async def chat_with_ai(chat_request: ChatMessage):
+async def chat_with_ai(
+    chat_request: ChatMessage,
+    language: Optional[str] = Query("en", description="Language preference (en or zh)")
+):
     """
     Chat with AI assistant about trading strategies, prompts, and platform features.
+    Now supports token analysis requests (e.g., "analyze BTC", "what about ETH?").
     
     Args:
         chat_request: Chat message from user
+        language: Language preference ("en" or "zh", default: "en")
     
     Returns:
         AI assistant's response
     """
     try:
+        # Validate language parameter
+        if language not in ["en", "zh"]:
+            language = "en"
+        
         chat_service = get_chat_service()
-        response = await chat_service.chat(chat_request.message)
+        response = await chat_service.chat(chat_request.message, language=language)
         
         return {
             "status": "success",
@@ -562,6 +747,240 @@ async def update_custom_prompts(
     except Exception as e:
         logger.error(f"Failed to update custom prompts: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# Trade History Analysis API
+# ============================================
+
+class AnalysisRequest(BaseModel):
+    """Request payload for triggering analysis."""
+    analysis_period_days: Optional[int] = 30
+    min_trades_required: Optional[int] = 10
+
+
+@app.get("/api/agents/{agent_id}/analysis/history")
+async def get_agent_analysis_history(
+    agent_id: str,
+    limit: int = Query(20, ge=1, le=100),
+):
+    """Get analysis history for a specific agent."""
+    if not trade_history_analyzer:
+        raise HTTPException(status_code=503, detail="Analysis system not initialized")
+    
+    try:
+        history = await trade_history_analyzer.get_analysis_history(
+            agent_id=agent_id,
+            limit=limit,
+        )
+        
+        return {
+            "status": "success",
+            "data": {
+                "history": [job.to_dict() for job in history]
+            }
+        }
+    except Exception as e:
+        logger.error(f"Failed to get analysis history for {agent_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/analysis/history/global")
+async def get_global_analysis_history(
+    limit: int = Query(20, ge=1, le=100),
+):
+    """Get global analysis history."""
+    if not trade_history_analyzer:
+        raise HTTPException(status_code=503, detail="Analysis system not initialized")
+    
+    try:
+        history = await trade_history_analyzer.get_analysis_history(
+            agent_id=None,
+            limit=limit,
+        )
+        
+        return {
+            "status": "success",
+            "data": {
+                "history": [job.to_dict() for job in history]
+            }
+        }
+    except Exception as e:
+        logger.error(f"Failed to get global analysis history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/agents/{agent_id}/insights")
+async def get_agent_insights(
+    agent_id: str,
+    limit: int = Query(10, ge=1, le=50),
+    min_confidence: float = Query(0.7, ge=0.0, le=1.0),
+):
+    """Get latest insights for a specific agent."""
+    if not trade_history_analyzer:
+        raise HTTPException(status_code=503, detail="Analysis system not initialized")
+    
+    try:
+        insights = await trade_history_analyzer.get_latest_insights(
+            agent_id=agent_id,
+            limit=limit,
+        )
+        
+        # Filter by confidence
+        filtered = [ins for ins in insights if ins.confidence_score >= min_confidence]
+        
+        return {
+            "status": "success",
+            "data": {
+                "insights": [ins.to_dict() for ins in filtered]
+            }
+        }
+    except Exception as e:
+        logger.error(f"Failed to get insights for {agent_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/insights/global")
+async def get_global_insights(
+    limit: int = Query(10, ge=1, le=50),
+    min_confidence: float = Query(0.7, ge=0.0, le=1.0),
+):
+    """Get global (shared) insights."""
+    if not trade_history_analyzer:
+        raise HTTPException(status_code=503, detail="Analysis system not initialized")
+    
+    try:
+        insights = await trade_history_analyzer.get_latest_insights(
+            agent_id=None,
+            limit=limit,
+        )
+        
+        # Filter by confidence
+        filtered = [ins for ins in insights if ins.confidence_score >= min_confidence]
+        
+        return {
+            "status": "success",
+            "data": {
+                "insights": [ins.to_dict() for ins in filtered]
+            }
+        }
+    except Exception as e:
+        logger.error(f"Failed to get global insights: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/admin/agents/{agent_id}/analyze")
+async def trigger_agent_analysis(
+    agent_id: str,
+    request: AnalysisRequest,
+    _: dict = Depends(config_routes.get_current_admin_token),
+):
+    """Manually trigger analysis for an agent."""
+    if not trade_history_analyzer:
+        raise HTTPException(status_code=503, detail="Analysis system not initialized")
+    
+    try:
+        job = await trade_history_analyzer.run_analysis(
+            agent_id=agent_id,
+            analysis_period_days=request.analysis_period_days or 30,
+            min_trades_required=request.min_trades_required or 10,
+            use_snapshot=True,
+        )
+        
+        return {
+            "status": "success",
+            "data": job.to_dict()
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to run analysis for {agent_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/admin/analyze/global")
+async def trigger_global_analysis(
+    request: AnalysisRequest,
+    _: dict = Depends(config_routes.get_current_admin_token),
+):
+    """Manually trigger global analysis."""
+    if not trade_history_analyzer:
+        raise HTTPException(status_code=503, detail="Analysis system not initialized")
+    
+    try:
+        # Note: Global analysis would need aggregation logic
+        # For now, we'll analyze all agents individually
+        agents = agent_manager.get_all_agents()
+        results = []
+        
+        for agent_info in agents:
+            if not agent_info.get("is_running", False):
+                continue
+            try:
+                job = await trade_history_analyzer.run_analysis(
+                    agent_id=agent_info["id"],
+                    analysis_period_days=request.analysis_period_days or 30,
+                    min_trades_required=request.min_trades_required or 10,
+                    use_snapshot=True,
+                )
+                results.append(job.to_dict())
+            except Exception as e:
+                logger.error(f"Failed to analyze agent {agent_info['id']}: {e}")
+                results.append({
+                    "agent_id": agent_info["id"],
+                    "status": "failed",
+                    "error": str(e)
+                })
+        
+        return {
+            "status": "success",
+            "data": results
+        }
+    except Exception as e:
+        logger.error(f"Failed to run global analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/admin/analysis/jobs")
+async def get_analysis_jobs(
+    limit: int = Query(50, ge=1, le=200),
+    _: dict = Depends(config_routes.get_current_admin_token),
+):
+    """Get all analysis jobs."""
+    if not trade_history_analyzer:
+        raise HTTPException(status_code=503, detail="Analysis system not initialized")
+    
+    try:
+        all_jobs = list(trade_history_analyzer.jobs.values())
+        all_jobs.sort(key=lambda x: x.scheduled_at, reverse=True)
+        
+        return {
+            "status": "success",
+            "data": {
+                "jobs": [job.to_dict() for job in all_jobs[:limit]]
+            }
+        }
+    except Exception as e:
+        logger.error(f"Failed to get analysis jobs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/admin/analysis/jobs/{job_id}")
+async def get_analysis_job(
+    job_id: str,
+    _: dict = Depends(config_routes.get_current_admin_token),
+):
+    """Get specific analysis job details."""
+    if not trade_history_analyzer:
+        raise HTTPException(status_code=503, detail="Analysis system not initialized")
+    
+    if job_id not in trade_history_analyzer.jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    return {
+        "status": "success",
+        "data": trade_history_analyzer.jobs[job_id].to_dict()
+    }
 
 
 if __name__ == "__main__":
