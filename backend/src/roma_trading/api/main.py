@@ -311,7 +311,7 @@ async def get_market_prices(symbols: Optional[str] = None):
     try:
         # Get default symbols from any active agent
         if not symbols:
-            default_symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "DOGEUSDT", "XRPUSDT"]
+            default_symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "DOGEUSDT"]
         else:
             default_symbols = [s.strip() for s in symbols.split(",")]
         
