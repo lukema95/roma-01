@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
     global trade_history_analyzer, analysis_scheduler
     
     try:
-        initialize_prompt_repository()
+        initialize_prompt_repository("prompts")
         await agent_manager.load_agents_from_config()
         asyncio.create_task(agent_manager.start_all())
         logger.info("All agents started successfully")
