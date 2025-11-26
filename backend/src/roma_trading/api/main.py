@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
     global trade_history_analyzer, analysis_scheduler
     
     try:
-        initialize_prompt_repository()
+        initialize_prompt_repository("prompts")
         await agent_manager.load_agents_from_config()
         asyncio.create_task(agent_manager.start_all())
         logger.info("All agents started successfully")
@@ -311,7 +311,7 @@ async def get_market_prices(symbols: Optional[str] = None):
     try:
         # Get default symbols from any active agent
         if not symbols:
-            default_symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "DOGEUSDT", "XRPUSDT"]
+            default_symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "DOGEUSDT"]
         else:
             default_symbols = [s.strip() for s in symbols.split(",")]
         

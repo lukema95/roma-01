@@ -1,3 +1,4 @@
 # Environment Variables
 .env
 .env.local
+config/trading_config.yaml

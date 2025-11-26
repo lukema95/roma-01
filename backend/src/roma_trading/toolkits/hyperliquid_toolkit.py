@@ -30,8 +30,9 @@ SYMBOL_MAP = {
     "ETHUSDT": "ETH",
     "SOLUSDT": "SOL",
     "BNBUSDT": "BNB",
+    "ADAUSDT": "ADA",
     "DOGEUSDT": "DOGE",
-    "XRPUSDT": "XRP",
+    "HYPEUSDT": "HYPE",
 }
 
 REVERSE_SYMBOL_MAP = {v: k for k, v in SYMBOL_MAP.items()}
